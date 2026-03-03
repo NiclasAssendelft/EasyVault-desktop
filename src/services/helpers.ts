@@ -217,7 +217,11 @@ export function isNotFoundError(err: unknown): boolean {
 }
 
 export function isOnlyofficeRelayTempTitle(title: string): boolean {
-  return /^_oo_relay_temp_/i.test(title);
+  const t = (title || "").trim().toLowerCase();
+  return (
+    t.startsWith("onlyoffice_") &&
+    (t.endsWith(".docx") || t.endsWith(".xlsx") || t.endsWith(".pptx"))
+  );
 }
 
 export function getStartOfWeek(date: Date): Date {

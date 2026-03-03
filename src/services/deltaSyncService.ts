@@ -1,9 +1,9 @@
-import { entityList, entityFilter, callDeltaSync, invokeBase44Function } from "../api";
-import { getSavedEmail } from "../storage";
+import { entityList, entityFilter, entityDelete, callDeltaSync, invokeBase44Function } from "../api";
+import { getAuthToken, getPreferredUploadToken, getSavedEmail } from "../storage";
 import {
   asString, asBool, asArray, normalizeFolder, normalizeItem,
   isOnlyofficeRelayTempTitle, semverAtLeast,
-  type FileItemType, type EntityName,
+  type FileItemType, type EntityName, type DesktopItem,
 } from "./helpers";
 import { canUseRemoteData } from "./entityService";
 import { useAuthStore } from "../stores/authStore";
@@ -39,6 +39,33 @@ export async function refreshAccessScope(): Promise<void> {
   }
 }
 
+const relayTempCleanupInFlight = new Set<string>();
+
+async function cleanupOnlyofficeRelayTempItems(items: DesktopItem[]): Promise<void> {
+  const token = getPreferredUploadToken() || getAuthToken();
+  if (!token) return;
+  const tempItems = items.filter((x) => isOnlyofficeRelayTempTitle(x.title));
+  if (tempItems.length === 0) return;
+  const setStatus = useUiStore.getState().setStatus;
+  let removed = 0;
+  let failed = 0;
+  for (const item of tempItems) {
+    if (!item.id || relayTempCleanupInFlight.has(item.id)) continue;
+    relayTempCleanupInFlight.add(item.id);
+    try {
+      await entityDelete("VaultItem", item.id, token);
+      removed += 1;
+    } catch {
+      failed += 1;
+    } finally {
+      relayTempCleanupInFlight.delete(item.id);
+    }
+  }
+  if (removed > 0 || failed > 0) {
+    setStatus(`relay temp cleanup: removed ${removed}, failed ${failed}`);
+  }
+}
+
 export async function refreshFilesFromRemote(): Promise<void> {
   if (!canUseRemoteData()) return;
   await refreshAccessScope();
@@ -70,7 +97,7 @@ export async function refreshFilesFromRemote(): Promise<void> {
       sync.setEntityUpdatedAt("Folder", folder.id, folder.updatedAtIso || folder.createdAtIso);
     }
 
-    const newItems = items
+    const allItems = items
       .filter((row) => spaceAllowed(asString(row.space_id)))
       .map((row) =>
         normalizeItem({
@@ -92,8 +119,11 @@ export async function refreshFilesFromRemote(): Promise<void> {
           spaceId: asString(row.space_id),
           createdBy: asString(row.created_by),
         })
-      )
-      .filter((x) => !isOnlyofficeRelayTempTitle(x.title));
+      );
+
+    // Delete ONLYOFFICE relay temp items from server, then filter them out locally
+    void cleanupOnlyofficeRelayTempItems(allItems);
+    const newItems = allItems.filter((x) => !isOnlyofficeRelayTempTitle(x.title));
 
     sync.clearEntityUpdatedAt("VaultItem");
     for (const item of newItems) {
