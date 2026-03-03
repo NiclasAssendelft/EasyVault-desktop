@@ -1240,6 +1240,12 @@ button:disabled {
   line-height: 1.2;
 }
 
+.preview-edit-live-status.status-error {
+  border-color: #7f2020;
+  background: rgba(40, 10, 10, 0.95);
+  color: #f87171;
+}
+
 .preview-edit-body.office-body {
   padding: 0;
   overflow: hidden;

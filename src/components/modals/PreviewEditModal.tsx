@@ -55,6 +55,7 @@ export default function PreviewEditModal() {
   const setLinkNotesDraft = usePreviewEditStore((s) => s.setLinkNotesDraft);
 
   const [statusText, setStatusText] = useState("");
+  const [persistedError, setPersistedError] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
   const adapterRenderedRef = useRef(false);
 
@@ -97,9 +98,18 @@ export default function PreviewEditModal() {
     };
   }, [targetId, kind, mode, item]);
 
+  // Persist errors from globalStatus so they don't get overwritten by delta sync
+  useEffect(() => {
+    const lower = globalStatus.toLowerCase();
+    if (lower.includes("failed") || lower.includes("error") || lower.includes("timeout")) {
+      setPersistedError(globalStatus);
+    }
+  }, [globalStatus]);
+
   const handleClose = useCallback(() => {
     closeStore();
     setStatusText("");
+    setPersistedError("");
   }, [closeStore]);
 
   if (!targetId) return null;
@@ -342,9 +352,14 @@ export default function PreviewEditModal() {
           <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
         </div>
 
-        {(globalStatus || statusText) && (
-          <p className="preview-edit-live-status files-scope-label">
-            {globalStatus || statusText}
+        {(persistedError || globalStatus || statusText) && (
+          <p
+            className={`preview-edit-live-status files-scope-label${persistedError ? " status-error" : ""}`}
+            onClick={persistedError ? () => setPersistedError("") : undefined}
+            title={persistedError ? "Click to dismiss" : undefined}
+            style={persistedError ? { cursor: "pointer" } : undefined}
+          >
+            {persistedError || globalStatus || statusText}
           </p>
         )}
 
