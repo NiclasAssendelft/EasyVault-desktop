@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ActiveEditSession, FileStat, UiCallbacks } from "./types";
+import type { ActiveEditSession, FileStat } from "./types";
+
+type UiCallbacks = {
+  onStatus: (text: string) => void;
+  onResult: (payload: unknown) => void;
+  onCurrentFile: (text: string) => void;
+  onLastSync: (text: string) => void;
+};
 import { WATCH_DEBOUNCE_MS, WATCH_INTERVAL_MS } from "./config";
 import { createNewVersion, sha256Hex, uploadViaChunkApi } from "./api";
 

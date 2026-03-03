@@ -29,13 +29,6 @@ export type ActiveEditSession = {
   queued: boolean;
 };
 
-export type UiCallbacks = {
-  onStatus: (text: string) => void;
-  onResult: (payload: unknown) => void;
-  onCurrentFile: (text: string) => void;
-  onLastSync: (text: string) => void;
-};
-
 export type LocalFolderFile = {
   path: string;
   name: string;

@@ -165,11 +165,6 @@ export function formatRelativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function formatTimeShort(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 export function toDisplayName(email: string): string {
   if (!email) return "User";
   const local = email.split("@")[0] || "";

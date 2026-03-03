@@ -8,12 +8,6 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 use reqwest::blocking::multipart;
 use sha2::{Digest, Sha256};
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[tauri::command]
 fn save_file_to_workspace(file_id: &str, filename: &str, bytes: Vec<u8>) -> Result<String, String> {
     let home_dir = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
@@ -875,7 +869,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             save_file_to_workspace,
             get_file_stat,
             read_file_bytes,

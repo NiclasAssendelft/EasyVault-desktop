@@ -5,7 +5,6 @@ export const APP_API_BASE_URL = `https://easy-vault.com/api/apps/${APP_ID}`;
 export const LOGIN_URL = `https://easy-vault.com/api/apps/${APP_ID}/auth/login`;
 export const CHECKOUT_FUNCTION_URL = `${BASE_URL}/fileCheckout`;
 export const FILE_LOCK_FUNCTION_URL = `${BASE_URL}/fileLock`;
-export const FILE_RESTORE_FUNCTION_URL = `${BASE_URL}/fileRestore`;
 export const UPLOAD_INIT_URL = `${BASE_URL}/extensionUploadInit`;
 export const UPLOAD_CHUNK_URL = `${BASE_URL}/extensionUploadChunk`;
 export const UPLOAD_COMPLETE_URL = `${BASE_URL}/extensionUploadComplete`;

@@ -8,7 +8,16 @@
       "Bash(grep -r \"react\\\\|zustand\" /Users/Niclas/Documents/EasyVault-desktop/src/*.ts /Users/Niclas/Documents/EasyVault-desktop/src/*.tsx)",
       "Bash(grep -n \"getAuthToken\\\\|getExtensionToken\\\\|getPreferredUploadToken\" services/*.ts)",
       "Bash(docker ps --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
-      "Bash(wc -l /Users/Niclas/Documents/EasyVault-desktop/src/services/deltaSyncService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/onlyofficeService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/helpers.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/entityService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/capabilitiesService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/fileOps.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/queueService.ts /Users/Niclas/Documents/EasyVault-desktop/src/api.ts /Users/Niclas/Documents/EasyVault-desktop/src/components/modals/PreviewEditModal.tsx /Users/Niclas/Documents/EasyVault-desktop/src/components/tabs/*.tsx /Users/Niclas/Documents/EasyVault-desktop/src/stores/*.ts /Users/Niclas/Documents/EasyVault-desktop/src-tauri/src/lib.rs)"
+      "Bash(wc -l /Users/Niclas/Documents/EasyVault-desktop/src/services/deltaSyncService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/onlyofficeService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/helpers.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/entityService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/capabilitiesService.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/fileOps.ts /Users/Niclas/Documents/EasyVault-desktop/src/services/queueService.ts /Users/Niclas/Documents/EasyVault-desktop/src/api.ts /Users/Niclas/Documents/EasyVault-desktop/src/components/modals/PreviewEditModal.tsx /Users/Niclas/Documents/EasyVault-desktop/src/components/tabs/*.tsx /Users/Niclas/Documents/EasyVault-desktop/src/stores/*.ts /Users/Niclas/Documents/EasyVault-desktop/src-tauri/src/lib.rs)",
+      "Bash(cargo build)",
+      "Bash(open -a Docker)",
+      "Bash(docker compose -f docker-compose.local.yml up -d)",
+      "Bash(docker rm -f onlyoffice)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost/healthcheck)",
+      "Bash(pnpm add pdfjs-dist pdf-lib)",
+      "Bash(ls /Users/Niclas/Documents/EasyVault-desktop/node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/)",
+      "Bash(cat /Users/Niclas/Documents/EasyVault-desktop/node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/package.json)",
+      "Bash(ls /Users/Niclas/Documents/EasyVault-desktop/node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/build/)"
     ]
   }
 }

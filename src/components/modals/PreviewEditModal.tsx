@@ -60,16 +60,19 @@ export default function PreviewEditModal() {
   const adapterRenderedRef = useRef(false);
 
   const item = useFilesStore((s) => s.items.find((i) => i.id === targetId));
+  // Use a ref so delta sync item updates don't restart the adapter/editor
+  const itemRef = useRef(item);
+  if (item) itemRef.current = item;
 
-  // Render adapter-based editors
+  // Render adapter-based editors — depends only on targetId/kind/mode, not item,
+  // so delta sync updates don't destroy and recreate the running editor.
   useEffect(() => {
-    if (!targetId || !item || !bodyRef.current) return;
+    if (!targetId || !itemRef.current || !bodyRef.current) return;
     const adapter = adapterForKind(kind);
     if (!adapter) return;
 
-    // Only render adapter once per open (or when mode changes)
     adapterRenderedRef.current = true;
-    const adapterItem = toAdapterItem(item);
+    const adapterItem = toAdapterItem(itemRef.current);
     const ctx: AdapterRenderContext = {
       item: adapterItem,
       bodyEl: bodyRef.current,
@@ -90,13 +93,12 @@ export default function PreviewEditModal() {
     }
 
     return () => {
-      // Cleanup: clear the body element
       if (bodyRef.current) {
         bodyRef.current.innerHTML = "";
       }
       adapterRenderedRef.current = false;
     };
-  }, [targetId, kind, mode, item]);
+  }, [targetId, kind, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist errors from globalStatus so they don't get overwritten by delta sync
   useEffect(() => {

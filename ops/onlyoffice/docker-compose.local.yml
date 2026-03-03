@@ -1,0 +1,20 @@
+# Local Mac development — runs ONLYOFFICE directly on localhost:80, no Caddy/HTTPS needed.
+# Usage: docker compose -f docker-compose.local.yml up -d
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ev_9fK2mQ7xT4pL8vN3zR6cH1yB5uD0wS
+      JWT_HEADER: Authorization
+      JWT_IN_BODY: "true"
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/healthcheck || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s

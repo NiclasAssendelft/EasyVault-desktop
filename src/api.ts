@@ -3,7 +3,6 @@ import {
   APP_API_BASE_URL,
   CHECKOUT_FUNCTION_URL,
   FILE_LOCK_FUNCTION_URL,
-  FILE_RESTORE_FUNCTION_URL,
   FILE_VERSIONS_FUNCTION_URL,
   LOGIN_URL,
   UPLOAD_CHUNK_URL,
@@ -205,12 +204,12 @@ export async function invokeBase44Function<T = unknown>(name: string, payload: R
   return postJson<T>(`${APP_API_BASE_URL}/functions/${name}`, payload, token);
 }
 
-export type DeltaSyncEntityChange<T = Record<string, unknown>> = {
+type DeltaSyncEntityChange<T = Record<string, unknown>> = {
   updated: T[];
   deleted: Array<{ record_id?: string; deleted_at?: string }>;
 };
 
-export type DeltaSyncResponse<T = Record<string, unknown>> = {
+type DeltaSyncResponse<T = Record<string, unknown>> = {
   version?: string;
   server_time?: string;
   changes?: Record<string, DeltaSyncEntityChange<T>>;
@@ -220,7 +219,7 @@ export type DeltaSyncResponse<T = Record<string, unknown>> = {
   };
 };
 
-export type DesktopSaveConflict<T = Record<string, unknown>> = {
+type DesktopSaveConflict<T = Record<string, unknown>> = {
   ok: false;
   status: 409;
   error: "conflict";
@@ -228,7 +227,7 @@ export type DesktopSaveConflict<T = Record<string, unknown>> = {
   serverUpdatedDate: string;
 };
 
-export type DesktopSaveSuccess<T = Record<string, unknown>> = {
+type DesktopSaveSuccess<T = Record<string, unknown>> = {
   ok: true;
   record: T;
 };
@@ -606,27 +605,6 @@ export async function createNewVersion(session: ActiveEditSession, fileUrl: stri
   if (!res.ok) {
     throw new Error(`Create version failed (${res.status}): ${JSON.stringify(data)}`);
   }
-}
-
-export async function restoreVersion(
-  token: string,
-  fileId: string,
-  versionId: string
-): Promise<{ success: boolean; message?: string }> {
-  const res = await tauriFetch(FILE_RESTORE_FUNCTION_URL, {
-    method: "POST",
-    headers: baseHeaders(token),
-    body: JSON.stringify({
-      token,
-      fileId,
-      versionId,
-    }),
-  });
-  const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
-  if (!res.ok) {
-    throw new Error(`fileRestore failed (${res.status}): ${JSON.stringify(data)}`);
-  }
-  return { success: Boolean(data.success), message: data.message };
 }
 
 export async function listVersions(
