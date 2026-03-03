@@ -536,6 +536,67 @@ h1 {
   font-size: 13px;
 }
 
+.pack-detail {
+  margin: 0 0 4px 36px;
+  padding: 10px 14px;
+  border-left: 2px solid #2a2a3a;
+  border-bottom: 1px solid #1a1a24;
+  border-radius: 0 0 8px 8px;
+  background: rgba(10, 10, 20, 0.6);
+}
+
+.pack-summary {
+  font-size: 13px;
+  color: #a1a1aa;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.pack-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #1a1a24;
+}
+
+.pack-item-row:last-child {
+  border-bottom: none;
+}
+
+.pack-item-type {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pack-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pack-item-title {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pack-item-reason {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.pack-item-confidence {
+  font-size: 11px;
+  color: #6c47ff;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
 .shared-card {
   max-width: 620px;
 }
