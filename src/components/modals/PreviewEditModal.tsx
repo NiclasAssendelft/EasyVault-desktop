@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewEditStore } from "../../stores/previewEditStore";
 import { useFilesStore } from "../../stores/filesStore";
 import { useSyncStore } from "../../stores/syncStore";
+import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { syncRemoteDelta } from "../../services/deltaSyncService";
 import {
@@ -37,6 +38,7 @@ function adapterForKind(kind: PreviewKind): EditorAdapter | null {
 }
 
 export default function PreviewEditModal() {
+  const globalStatus = useUiStore((s) => s.statusText);
   const targetId = usePreviewEditStore((s) => s.targetId);
   const mode = usePreviewEditStore((s) => s.mode);
   const kind = usePreviewEditStore((s) => s.kind);
@@ -340,7 +342,11 @@ export default function PreviewEditModal() {
           <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
         </div>
 
-        {statusText && <p className="files-scope-label">{statusText}</p>}
+        {(statusText || globalStatus) && (
+          <p className="preview-edit-live-status files-scope-label">
+            {statusText || globalStatus}
+          </p>
+        )}
 
         {renderBody()}
 
