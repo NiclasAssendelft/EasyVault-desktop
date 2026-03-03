@@ -338,12 +338,16 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     await ensureOnlyofficeApi(documentServerUrl);
     setStatus("ONLYOFFICE: API loaded");
 
-    // Prepare host element
-    const hostEl = document.createElement("div");
-    hostEl.id = "onlyoffice-editor-host";
-    hostEl.className = "onlyoffice-host";
-    hostEl.style.height = "100%";
-    hostEl.style.width = "100%";
+    // Find the host element created by the adapter in the modal body.
+    // Fall back to appending to document.body if opened outside a modal.
+    let hostEl = document.getElementById("onlyoffice-editor-host");
+    if (!hostEl) {
+      hostEl = document.createElement("div");
+      hostEl.id = "onlyoffice-editor-host";
+      hostEl.className = "onlyoffice-host";
+      hostEl.style.cssText = "height:100%;width:100%;min-height:600px;";
+      document.body.appendChild(hostEl);
+    }
 
     // Destroy any previous editor
     const prev = usePreviewEditStore.getState().onlyofficeEditorInstance;

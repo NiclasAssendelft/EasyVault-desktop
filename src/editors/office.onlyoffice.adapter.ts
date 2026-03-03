@@ -23,11 +23,8 @@ export const officeOnlyofficeAdapter: EditorAdapter = {
       return;
     }
 
-    ctx.bodyEl.innerHTML = `
-      <div class="preview-placeholder">
-        <p>Opening ONLYOFFICE...</p>
-      </div>
-    `;
+    // Create the host element that DocsAPI.DocEditor will mount into
+    ctx.bodyEl.innerHTML = `<div id="onlyoffice-editor-host" class="onlyoffice-host" style="height:100%;width:100%;min-height:600px;"></div>`;
 
     const launch = () => {
       const integrations = (window as unknown as { EasyVaultEditors?: { onlyofficeLaunch?: (fileId: string) => void } }).EasyVaultEditors;
