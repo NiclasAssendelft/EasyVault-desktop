@@ -342,9 +342,9 @@ export default function PreviewEditModal() {
           <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
         </div>
 
-        {(statusText || globalStatus) && (
+        {(globalStatus || statusText) && (
           <p className="preview-edit-live-status files-scope-label">
-            {statusText || globalStatus}
+            {globalStatus || statusText}
           </p>
         )}
 
