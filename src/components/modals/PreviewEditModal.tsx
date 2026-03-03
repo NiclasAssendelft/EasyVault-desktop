@@ -325,13 +325,13 @@ export default function PreviewEditModal() {
     }
 
     // For PDF, image, office, other: the adapter renders into bodyRef via useEffect
-    return <div className="preview-edit-body" ref={bodyRef} />;
+    return <div className={`preview-edit-body${realKind === "office" ? " office-body" : ""}`} ref={bodyRef} />;
   }
 
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={handleClose} />
-      <div className="modal-panel preview-edit-panel">
+      <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}`}>
         <div className="modal-head">
           <div className="preview-edit-title-wrap">
             <h3>{mode === "preview" ? "Preview" : "Edit"}: {item.title}</h3>
