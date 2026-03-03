@@ -1,6 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
+import { openPath } from "@tauri-apps/plugin-opener";
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
 
-// Lazy-load PDF libraries to keep the main bundle small
+// Lazy-load PDF.js to keep the main bundle small
 async function loadPdfJs() {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -10,74 +12,84 @@ async function loadPdfJs() {
   return pdfjs;
 }
 
-async function loadPdfLib() {
-  return import("pdf-lib");
-}
-
 // ---------------------------------------------------------------------------
-// Types for draft operations
+// Preview state
 // ---------------------------------------------------------------------------
 
-type PdfOp =
-  | { type: "rotate"; pageIndex: number; angleDeg: number }
-  | { type: "delete"; pageIndex: number }
-  | { type: "text"; pageIndex: number; x: number; y: number; text: string };
-
-type PdfDraft = {
-  ops: PdfOp[];
+type PdfPreviewState = {
   currentPage: number;
   totalPages: number;
-  scale: number;
+  zoomLevel: number; // 0 = fit-width, positive = zoom steps above fit
   pdfBytes: Uint8Array | null;
+  pdfDoc: ReturnType<Awaited<ReturnType<typeof loadPdfJs>>["getDocument"]> extends { promise: Promise<infer D> } ? D : unknown;
 };
 
-function getDraft(ctx: AdapterRenderContext | AdapterSaveContext): PdfDraft {
+function getPreviewState(ctx: AdapterRenderContext): PdfPreviewState {
   if (!ctx.draft._pdf) {
-    ctx.draft._pdf = { ops: [], currentPage: 0, totalPages: 0, scale: 1.2, pdfBytes: null } as PdfDraft;
+    ctx.draft._pdf = { currentPage: 0, totalPages: 0, zoomLevel: 0, pdfBytes: null, pdfDoc: null } as unknown as PdfPreviewState;
   }
-  return ctx.draft._pdf as PdfDraft;
+  return ctx.draft._pdf as PdfPreviewState;
 }
 
 // ---------------------------------------------------------------------------
 // Shared rendering helper
 // ---------------------------------------------------------------------------
 
-async function loadAndRenderPage(
-  container: HTMLElement,
-  pdfBytes: Uint8Array,
-  pageIndex: number,
-  scale: number,
-): Promise<{ totalPages: number }> {
+async function renderPage(
+  canvasWrap: HTMLElement,
+  state: PdfPreviewState,
+): Promise<void> {
+  if (!state.pdfBytes) return;
   const pdfjs = await loadPdfJs();
-  const loadingTask = pdfjs.getDocument({ data: pdfBytes.slice() });
-  const doc = await loadingTask.promise;
-  const totalPages = doc.numPages;
 
-  if (pageIndex < 0 || pageIndex >= totalPages) return { totalPages };
+  // Reuse cached document or load fresh
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let doc = state.pdfDoc as any;
+  if (!doc) {
+    const loadingTask = pdfjs.getDocument({ data: state.pdfBytes.slice() });
+    doc = await loadingTask.promise;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (state as any).pdfDoc = doc;
+    state.totalPages = doc.numPages;
+  }
+
+  const pageIndex = state.currentPage;
+  if (pageIndex < 0 || pageIndex >= state.totalPages) return;
 
   const page = await doc.getPage(pageIndex + 1); // PDF.js is 1-indexed
+
+  // Calculate scale: fit page width to container, then apply zoom
+  const containerWidth = canvasWrap.clientWidth - 32; // subtract padding
+  const baseViewport = page.getViewport({ scale: 1.0 });
+  const fitScale = containerWidth / baseViewport.width;
+  const scale = fitScale * (1 + state.zoomLevel * 0.25);
+
   const viewport = page.getViewport({ scale });
 
-  // Clear previous render
-  const existing = container.querySelector<HTMLCanvasElement>(".pdf-page-canvas");
+  // HiDPI: render at device pixel ratio for crisp text
+  const dpr = window.devicePixelRatio || 1;
+
+  const existing = canvasWrap.querySelector<HTMLCanvasElement>(".pdf-page-canvas");
   if (existing) existing.remove();
 
   const canvas = document.createElement("canvas");
   canvas.className = "pdf-page-canvas";
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
+  // Set the actual pixel dimensions (high-res)
+  canvas.width = Math.floor(viewport.width * dpr);
+  canvas.height = Math.floor(viewport.height * dpr);
+  // Set the CSS display dimensions
+  canvas.style.width = `${Math.floor(viewport.width)}px`;
+  canvas.style.height = `${Math.floor(viewport.height)}px`;
 
   const renderCtx = canvas.getContext("2d");
-  if (!renderCtx) return { totalPages };
+  if (!renderCtx) return;
 
-  const renderTarget = container.querySelector(".pdf-canvas-wrap") || container;
-  renderTarget.appendChild(canvas);
+  // Scale the context to match device pixel ratio
+  renderCtx.scale(dpr, dpr);
 
-  // PDF.js v5 requires the canvas element in RenderParameters
+  canvasWrap.appendChild(canvas);
+
   await page.render({ canvasContext: renderCtx, viewport, canvas }).promise;
-  doc.destroy();
-
-  return { totalPages };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +100,7 @@ export const pdfNutrientAdapter: EditorAdapter = {
   kind: "pdf",
   canEdit: () => true,
 
-  // --- Preview mode: read-only page viewer ---
+  // --- Preview mode: in-app PDF.js viewer ---
   openPreview(ctx: AdapterRenderContext): void {
     const source = ctx.getPreviewUrl(ctx.item);
     if (!source) {
@@ -96,28 +108,37 @@ export const pdfNutrientAdapter: EditorAdapter = {
       return;
     }
 
-    const draft = getDraft(ctx);
+    const state = getPreviewState(ctx);
 
     ctx.bodyEl.innerHTML = `
       <div class="pdf-viewer">
         <div class="pdf-toolbar">
-          <button type="button" class="ghost pdf-btn" id="pdf-prev">&#9664; Prev</button>
+          <button type="button" class="ghost pdf-btn" id="pdf-prev" title="Previous page">&#9664;</button>
           <span id="pdf-page-info" class="pdf-page-info">Loading...</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-next">Next &#9654;</button>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-out">&minus;</button>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-in">&plus;</button>
+          <button type="button" class="ghost pdf-btn" id="pdf-next" title="Next page">&#9654;</button>
+          <span class="pdf-toolbar-sep">|</span>
+          <button type="button" class="ghost pdf-btn" id="pdf-zoom-out" title="Zoom out">&minus;</button>
+          <span id="pdf-zoom-info" class="pdf-page-info">Fit</span>
+          <button type="button" class="ghost pdf-btn" id="pdf-zoom-in" title="Zoom in">&plus;</button>
+          <button type="button" class="ghost pdf-btn pdf-btn-sm" id="pdf-zoom-reset" title="Reset zoom">Fit width</button>
         </div>
-        <div class="pdf-canvas-wrap"></div>
+        <div class="pdf-canvas-wrap" id="pdf-canvas-wrap"></div>
       </div>
     `;
 
     const pageInfo = ctx.bodyEl.querySelector<HTMLSpanElement>("#pdf-page-info")!;
-    const canvasWrap = ctx.bodyEl.querySelector<HTMLDivElement>(".pdf-canvas-wrap")!;
+    const zoomInfo = ctx.bodyEl.querySelector<HTMLSpanElement>("#pdf-zoom-info")!;
+    const canvasWrap = ctx.bodyEl.querySelector<HTMLDivElement>("#pdf-canvas-wrap")!;
+
+    function updateInfo() {
+      pageInfo.textContent = `${state.currentPage + 1} / ${state.totalPages}`;
+      zoomInfo.textContent = state.zoomLevel === 0 ? "Fit" : `${Math.round((1 + state.zoomLevel * 0.25) * 100)}%`;
+    }
 
     async function renderCurrent() {
-      if (!draft.pdfBytes) return;
-      pageInfo.textContent = `Page ${draft.currentPage + 1} / ${draft.totalPages}`;
-      await loadAndRenderPage(canvasWrap, draft.pdfBytes, draft.currentPage, draft.scale);
+      if (!state.pdfBytes) return;
+      updateInfo();
+      await renderPage(canvasWrap, state);
     }
 
     // Load PDF bytes
@@ -125,33 +146,36 @@ export const pdfNutrientAdapter: EditorAdapter = {
       try {
         const res = await fetch(source);
         if (!res.ok) throw new Error(`Download failed (${res.status})`);
-        draft.pdfBytes = new Uint8Array(await res.arrayBuffer());
-        const { totalPages } = await loadAndRenderPage(canvasWrap, draft.pdfBytes, 0, draft.scale);
-        draft.totalPages = totalPages;
-        draft.currentPage = 0;
-        pageInfo.textContent = `Page 1 / ${totalPages}`;
+        state.pdfBytes = new Uint8Array(await res.arrayBuffer());
+        state.currentPage = 0;
+        await renderPage(canvasWrap, state);
+        updateInfo();
       } catch (err) {
         pageInfo.textContent = `Load failed: ${String(err)}`;
       }
     })();
 
     ctx.bodyEl.querySelector("#pdf-prev")!.addEventListener("click", () => {
-      if (draft.currentPage > 0) { draft.currentPage--; void renderCurrent(); }
+      if (state.currentPage > 0) { state.currentPage--; void renderCurrent(); }
     });
     ctx.bodyEl.querySelector("#pdf-next")!.addEventListener("click", () => {
-      if (draft.currentPage < draft.totalPages - 1) { draft.currentPage++; void renderCurrent(); }
+      if (state.currentPage < state.totalPages - 1) { state.currentPage++; void renderCurrent(); }
     });
     ctx.bodyEl.querySelector("#pdf-zoom-in")!.addEventListener("click", () => {
-      draft.scale = Math.min(draft.scale + 0.2, 3.0);
+      state.zoomLevel = Math.min(state.zoomLevel + 1, 8);
       void renderCurrent();
     });
     ctx.bodyEl.querySelector("#pdf-zoom-out")!.addEventListener("click", () => {
-      draft.scale = Math.max(draft.scale - 0.2, 0.4);
+      state.zoomLevel = Math.max(state.zoomLevel - 1, -2);
+      void renderCurrent();
+    });
+    ctx.bodyEl.querySelector("#pdf-zoom-reset")!.addEventListener("click", () => {
+      state.zoomLevel = 0;
       void renderCurrent();
     });
   },
 
-  // --- Edit mode: viewer + editing controls ---
+  // --- Edit mode: checkout → open in native PDF editor → auto-sync ---
   openEditor(ctx: AdapterRenderContext): void {
     const source = ctx.getPreviewUrl(ctx.item);
     if (!source) {
@@ -159,280 +183,85 @@ export const pdfNutrientAdapter: EditorAdapter = {
       return;
     }
 
-    const draft = getDraft(ctx);
-
     ctx.bodyEl.innerHTML = `
-      <div class="pdf-viewer pdf-editor">
-        <div class="pdf-toolbar">
-          <button type="button" class="ghost pdf-btn" id="pdf-prev">&#9664;</button>
-          <span id="pdf-page-info" class="pdf-page-info">Loading...</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-next">&#9654;</button>
-          <span class="pdf-toolbar-sep">|</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-out">&minus;</button>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-in">&plus;</button>
-          <span class="pdf-toolbar-sep">|</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-rotate">Rotate Page</button>
-          <button type="button" class="ghost pdf-btn pdf-btn-danger" id="pdf-delete">Delete Page</button>
-          <button type="button" class="ghost pdf-btn" id="pdf-add-text">Add Text</button>
+      <div class="pdf-native-editor">
+        <div class="pdf-native-status">
+          <p class="pdf-native-title">Edit with your PDF editor</p>
+          <p class="pdf-native-desc">
+            The PDF will be downloaded to your workspace and opened in your
+            default PDF editor (Adobe Acrobat, Preview, etc.). Changes are
+            automatically synced back to EasyVault when you save in the editor.
+          </p>
+          <button type="button" id="pdf-launch-native" class="pdf-launch-btn">Open in PDF Editor</button>
+          <p id="pdf-native-info" class="pdf-native-info"></p>
         </div>
-        <div class="pdf-edit-text-bar" id="pdf-text-bar" style="display:none;">
-          <input type="text" id="pdf-text-input" placeholder="Type annotation text..." class="pdf-text-input" />
-          <span class="pdf-text-hint">Click on the page to place text, then press Add.</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-text-confirm">Add</button>
-          <button type="button" class="ghost pdf-btn" id="pdf-text-cancel">Cancel</button>
-        </div>
-        <div class="pdf-ops-summary" id="pdf-ops-summary"></div>
-        <div class="pdf-canvas-wrap" id="pdf-canvas-wrap"></div>
       </div>
     `;
 
-    const pageInfo = ctx.bodyEl.querySelector<HTMLSpanElement>("#pdf-page-info")!;
-    const canvasWrap = ctx.bodyEl.querySelector<HTMLDivElement>("#pdf-canvas-wrap")!;
-    const textBar = ctx.bodyEl.querySelector<HTMLDivElement>("#pdf-text-bar")!;
-    const textInput = ctx.bodyEl.querySelector<HTMLInputElement>("#pdf-text-input")!;
-    const opsSummary = ctx.bodyEl.querySelector<HTMLDivElement>("#pdf-ops-summary")!;
+    const launchBtn = ctx.bodyEl.querySelector<HTMLButtonElement>("#pdf-launch-native")!;
+    const infoEl = ctx.bodyEl.querySelector<HTMLParagraphElement>("#pdf-native-info")!;
 
-    let textPlaceMode = false;
-    let pendingTextX = 50;
-    let pendingTextY = 50;
+    launchBtn.addEventListener("click", () => {
+      launchBtn.disabled = true;
+      infoEl.textContent = "Checking out file...";
 
-    function updateOpsSummary() {
-      if (draft.ops.length === 0) {
-        opsSummary.textContent = "";
-        return;
-      }
-      const descriptions = draft.ops.map((op, i) => {
-        if (op.type === "rotate") return `${i + 1}. Rotate page ${op.pageIndex + 1} by ${op.angleDeg}°`;
-        if (op.type === "delete") return `${i + 1}. Delete page ${op.pageIndex + 1}`;
-        if (op.type === "text") return `${i + 1}. Add text on page ${op.pageIndex + 1}`;
-        return "";
-      });
-      opsSummary.innerHTML = `
-        <span class="pdf-ops-label">Pending edits (${draft.ops.length}):</span>
-        ${descriptions.join(" &middot; ")}
-        <button type="button" class="ghost pdf-btn pdf-btn-sm" id="pdf-undo">Undo last</button>
-      `;
-      const undoBtn = opsSummary.querySelector<HTMLButtonElement>("#pdf-undo");
-      if (undoBtn) {
-        undoBtn.addEventListener("click", () => {
-          draft.ops.pop();
-          updateOpsSummary();
-          ctx.setStatus(`Undo — ${draft.ops.length} edits pending`);
-        });
-      }
-    }
+      (async () => {
+        try {
+          const { tryCheckout, downloadFile, startAutoSync } = await import("./pdf.native.bridge");
 
-    async function renderCurrent() {
-      if (!draft.pdfBytes) return;
-      pageInfo.textContent = `Page ${draft.currentPage + 1} / ${draft.totalPages}`;
-      await loadAndRenderPage(canvasWrap, draft.pdfBytes, draft.currentPage, draft.scale);
-    }
+          // 1. Try checkout (acquire lock + get edit session)
+          infoEl.textContent = "Checking out file...";
+          const checkout = await tryCheckout(ctx.item.id);
 
-    // Load PDF
-    (async () => {
-      try {
-        const res = await fetch(source);
-        if (!res.ok) throw new Error(`Download failed (${res.status})`);
-        draft.pdfBytes = new Uint8Array(await res.arrayBuffer());
-        const { totalPages } = await loadAndRenderPage(canvasWrap, draft.pdfBytes, 0, draft.scale);
-        draft.totalPages = totalPages;
-        draft.currentPage = 0;
-        pageInfo.textContent = `Page 1 / ${totalPages}`;
-        updateOpsSummary();
-      } catch (err) {
-        pageInfo.textContent = `Load failed: ${String(err)}`;
-      }
-    })();
+          // 2. Download the file — use checkout URL if available, otherwise the stored URL
+          infoEl.textContent = "Downloading...";
+          const downloadUrl = checkout?.download_url || ctx.getPreviewUrl(ctx.item);
+          if (!downloadUrl) throw new Error("No file URL available");
+          const bytes = await downloadFile(downloadUrl);
 
-    // Navigation
-    ctx.bodyEl.querySelector("#pdf-prev")!.addEventListener("click", () => {
-      if (draft.currentPage > 0) { draft.currentPage--; void renderCurrent(); }
-    });
-    ctx.bodyEl.querySelector("#pdf-next")!.addEventListener("click", () => {
-      if (draft.currentPage < draft.totalPages - 1) { draft.currentPage++; void renderCurrent(); }
-    });
-    ctx.bodyEl.querySelector("#pdf-zoom-in")!.addEventListener("click", () => {
-      draft.scale = Math.min(draft.scale + 0.2, 3.0); void renderCurrent();
-    });
-    ctx.bodyEl.querySelector("#pdf-zoom-out")!.addEventListener("click", () => {
-      draft.scale = Math.max(draft.scale - 0.2, 0.4); void renderCurrent();
-    });
+          // 3. Save to workspace
+          infoEl.textContent = "Saving to workspace...";
+          const savedPath = await invoke<string>("save_file_to_workspace", {
+            fileId: ctx.item.id,
+            filename: ctx.item.title,
+            bytes: Array.from(bytes),
+          });
 
-    // Rotate current page
-    ctx.bodyEl.querySelector("#pdf-rotate")!.addEventListener("click", () => {
-      if (draft.totalPages === 0) return;
-      draft.ops.push({ type: "rotate", pageIndex: draft.currentPage, angleDeg: 90 });
-      updateOpsSummary();
-      ctx.setStatus(`Rotate page ${draft.currentPage + 1} queued`);
-    });
+          // 4. Open in native editor
+          infoEl.textContent = "Opening in your PDF editor...";
+          await openPath(savedPath);
 
-    // Delete current page
-    ctx.bodyEl.querySelector("#pdf-delete")!.addEventListener("click", () => {
-      if (draft.totalPages <= 1) {
-        ctx.setStatus("Cannot delete the only page");
-        return;
-      }
-      draft.ops.push({ type: "delete", pageIndex: draft.currentPage });
-      updateOpsSummary();
-      ctx.setStatus(`Delete page ${draft.currentPage + 1} queued`);
-    });
+          // 5. Start auto-sync if checkout succeeded (we have an edit session)
+          if (checkout) {
+            await startAutoSync({
+              fileId: ctx.item.id,
+              filename: ctx.item.title,
+              localPath: savedPath,
+              editSessionId: checkout.edit_session_id,
+            }, ctx.setStatus);
 
-    // Add text annotation
-    ctx.bodyEl.querySelector("#pdf-add-text")!.addEventListener("click", () => {
-      textPlaceMode = true;
-      textBar.style.display = "flex";
-      textInput.focus();
-      ctx.setStatus("Click on the page to set position, then type text and click Add");
-    });
-
-    // Click on canvas to set text position
-    canvasWrap.addEventListener("click", (e) => {
-      if (!textPlaceMode) return;
-      const canvas = canvasWrap.querySelector<HTMLCanvasElement>(".pdf-page-canvas");
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      // Convert click position to PDF coordinates (relative to canvas, scaled back)
-      pendingTextX = (e.clientX - rect.left) / draft.scale;
-      pendingTextY = (e.clientY - rect.top) / draft.scale;
-      ctx.setStatus(`Text position set at (${Math.round(pendingTextX)}, ${Math.round(pendingTextY)})`);
-    });
-
-    // Confirm text
-    ctx.bodyEl.querySelector("#pdf-text-confirm")!.addEventListener("click", () => {
-      const text = textInput.value.trim();
-      if (!text) {
-        ctx.setStatus("Enter text first");
-        return;
-      }
-      draft.ops.push({
-        type: "text",
-        pageIndex: draft.currentPage,
-        x: pendingTextX,
-        y: pendingTextY,
-        text,
-      });
-      textInput.value = "";
-      textPlaceMode = false;
-      textBar.style.display = "none";
-      updateOpsSummary();
-      ctx.setStatus(`Text annotation added on page ${draft.currentPage + 1}`);
-    });
-
-    // Cancel text
-    ctx.bodyEl.querySelector("#pdf-text-cancel")!.addEventListener("click", () => {
-      textInput.value = "";
-      textPlaceMode = false;
-      textBar.style.display = "none";
-      ctx.setStatus("");
+            infoEl.textContent = `Editing: ${ctx.item.title} — changes auto-sync when you save in your editor`;
+            ctx.setStatus("PDF opened in native editor — auto-sync active");
+          } else {
+            // Checkout failed (e.g. 403 for service-owned files) — open read-only
+            infoEl.textContent = `Opened: ${ctx.item.title} — read-only (file lock unavailable)`;
+            ctx.setStatus("PDF opened in native editor — read-only mode (checkout unavailable)");
+            launchBtn.disabled = false;
+          }
+        } catch (err) {
+          infoEl.textContent = `Failed: ${String(err)}`;
+          ctx.setStatus(`Open failed: ${String(err)}`);
+          launchBtn.disabled = false;
+        }
+      })();
     });
   },
 
-  // --- Save: apply operations with pdf-lib ---
-  async save(ctx: AdapterSaveContext): Promise<AdapterSaveResult> {
-    const draft = getDraft(ctx);
-    if (draft.ops.length === 0) {
-      return { ok: false, message: "No edits to save" };
-    }
-
-    if (!ctx.item.storedFileUrl) {
-      return { ok: false, message: "Missing PDF file URL" };
-    }
-
-    const uploadToken = ctx.getUploadToken();
-    if (!uploadToken) {
-      return { ok: false, message: "Missing upload token" };
-    }
-
-    ctx.setStatus("Checking out file...");
-    const checkout = await ctx.checkoutFile(ctx.item.id, uploadToken);
-
-    ctx.setStatus("Downloading PDF...");
-    const originalBytes = await ctx.downloadFile(checkout.download_url);
-
-    ctx.setStatus("Applying edits...");
-    const { PDFDocument, degrees, rgb, StandardFonts } = await loadPdfLib();
-    const pdfDoc = await PDFDocument.load(originalBytes);
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-    // Track page index shifts from deletions
-    // Process ops in order, adjusting indices as pages are removed
-    const deleteIndices: number[] = [];
-
-    for (const op of draft.ops) {
-      if (op.type === "rotate") {
-        // Adjust index for previous deletions
-        let adjustedIndex = op.pageIndex;
-        for (const di of deleteIndices) { if (di <= adjustedIndex) adjustedIndex++; }
-        const pages = pdfDoc.getPages();
-        if (adjustedIndex >= 0 && adjustedIndex < pages.length) {
-          const page = pages[adjustedIndex];
-          const current = page.getRotation().angle;
-          page.setRotation(degrees(current + op.angleDeg));
-        }
-      } else if (op.type === "delete") {
-        let adjustedIndex = op.pageIndex;
-        for (const di of deleteIndices) { if (di <= adjustedIndex) adjustedIndex++; }
-        const pages = pdfDoc.getPages();
-        if (adjustedIndex >= 0 && adjustedIndex < pages.length && pages.length > 1) {
-          pdfDoc.removePage(adjustedIndex);
-          deleteIndices.push(op.pageIndex);
-          deleteIndices.sort((a, b) => a - b);
-        }
-      } else if (op.type === "text") {
-        let adjustedIndex = op.pageIndex;
-        for (const di of deleteIndices) { if (di <= adjustedIndex) adjustedIndex++; }
-        const pages = pdfDoc.getPages();
-        if (adjustedIndex >= 0 && adjustedIndex < pages.length) {
-          const page = pages[adjustedIndex];
-          const { height } = page.getSize();
-          // PDF coordinate system has origin at bottom-left; screen coordinates have origin at top-left
-          page.drawText(op.text, {
-            x: op.x,
-            y: height - op.y,
-            size: 14,
-            font,
-            color: rgb(0, 0, 0),
-          });
-        }
-      }
-    }
-
-    ctx.setStatus("Saving PDF...");
-    const modifiedBytes = await pdfDoc.save();
-    const outBytes = new Uint8Array(modifiedBytes);
-
-    ctx.setStatus("Uploading...");
-    const filename = ctx.item.title || `${ctx.item.id}.pdf`;
-    const uploadedUrl = await ctx.uploadFileWithToken(uploadToken, filename, outBytes);
-    const checksum = await ctx.sha256Hex(outBytes);
-
-    ctx.setStatus("Creating version...");
-    await ctx.createNewVersion(
-      {
-        fileId: ctx.item.id,
-        filename,
-        localPath: "",
-        editSessionId: checkout.edit_session_id,
-        authToken: ctx.getAuthToken() || uploadToken,
-        extensionToken: uploadToken,
-        lastModifiedMs: Date.now(),
-        lastSize: outBytes.length,
-        intervalId: null,
-        debounceId: null,
-        uploading: false,
-        queued: false,
-      },
-      uploadedUrl,
-      checksum,
-    );
-
-    const versions = await ctx.listVersions(ctx.getAuthToken() || uploadToken, ctx.item.id);
-    const latest = versions[0] as Record<string, unknown> | undefined;
-    const updatedAtIso = typeof latest?.created_date === "string" ? latest.created_date : new Date().toISOString();
-
-    // Clear ops after successful save
-    draft.ops = [];
-
-    return { ok: true, message: `PDF saved with ${draft.ops.length} edits applied`, updatedAtIso };
+  // Save is handled by the syncEngine auto-watcher, not the adapter
+  async save(_ctx: AdapterSaveContext): Promise<AdapterSaveResult> {
+    return {
+      ok: false,
+      message: "Changes are auto-synced from your native PDF editor. Save in your editor to sync.",
+    };
   },
 };

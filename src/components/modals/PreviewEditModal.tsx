@@ -345,7 +345,7 @@ export default function PreviewEditModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={handleClose} />
-      <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}`}>
+      <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}${realKind === "pdf" ? " pdf-mode" : ""}`}>
         <div className="modal-head">
           <div className="preview-edit-title-wrap">
             <h3>{mode === "preview" ? "Preview" : "Edit"}: {item.title}</h3>

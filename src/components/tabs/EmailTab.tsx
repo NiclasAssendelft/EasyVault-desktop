@@ -51,6 +51,8 @@ export default function EmailTab() {
   const setStatus = useUiStore((s) => s.setStatus);
   const [connecting, setConnecting] = useState(false);
 
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
+
   const handleConnect = useCallback(async () => {
     setConnecting(true);
     try {
@@ -62,6 +64,20 @@ export default function EmailTab() {
       setStatus(`Gmail sync failed: ${String(err)}`);
     } finally {
       setConnecting(false);
+    }
+  }, [setStatus]);
+
+  const handleConnectOutlook = useCallback(async () => {
+    setConnectingOutlook(true);
+    try {
+      setStatus("Syncing Outlook...");
+      await invokeBase44Function("syncOutlookEmails", {});
+      await refreshEmailFromRemote();
+      setStatus("Outlook synced");
+    } catch (err) {
+      setStatus(`Outlook sync failed: ${String(err)}`);
+    } finally {
+      setConnectingOutlook(false);
     }
   }, [setStatus]);
 
@@ -99,8 +115,8 @@ export default function EmailTab() {
             >
               {connecting ? "Connecting..." : "Connect Gmail"}
             </button>
-            <button type="button" className="ghost" disabled>
-              Outlook (Coming Soon)
+            <button type="button" className="ghost" onClick={handleConnectOutlook} disabled={connectingOutlook}>
+              {connectingOutlook ? "Connecting..." : "Connect Outlook"}
             </button>
           </div>
           <div className="note-box">
@@ -122,6 +138,9 @@ export default function EmailTab() {
         <div className="actions-row">
           <button type="button" onClick={handleConnect} disabled={connecting}>
             {connecting ? "Syncing..." : "Sync Gmail"}
+          </button>
+          <button type="button" className="ghost" onClick={handleConnectOutlook} disabled={connectingOutlook}>
+            {connectingOutlook ? "Syncing..." : "Sync Outlook"}
           </button>
         </div>
       </div>
