@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { invokeBase44Function, listVersions } from "../api";
-import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret } from "../storage";
+import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret, getOnlyofficeServerUrl } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useUiStore } from "../stores/uiStore";
@@ -298,11 +298,14 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     });
 
     const editorNode = (payload.editor as Record<string, unknown> | undefined) || payload;
+    // Use the user-configured server URL if set, otherwise fall back to what the backend returns
+    const configuredServerUrl = getOnlyofficeServerUrl();
     let documentServerUrl =
+      configuredServerUrl ||
       asString(editorNode.document_server_url) ||
       asString(payload.document_server_url) ||
       "http://host.docker.internal";
-    if (documentServerUrl.includes("host.docker.internal")) {
+    if (!configuredServerUrl && documentServerUrl.includes("host.docker.internal")) {
       documentServerUrl = documentServerUrl.replace("host.docker.internal", "localhost");
     }
 

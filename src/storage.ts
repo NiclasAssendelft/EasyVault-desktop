@@ -83,3 +83,15 @@ export function setOnlyofficeJwtSecret(secret: string): void {
     localStorage.removeItem(STORAGE_KEYS.onlyofficeJwtSecret);
   }
 }
+
+export function getOnlyofficeServerUrl(): string {
+  return localStorage.getItem(STORAGE_KEYS.onlyofficeServerUrl) || "";
+}
+
+export function setOnlyofficeServerUrl(url: string): void {
+  if (url) {
+    localStorage.setItem(STORAGE_KEYS.onlyofficeServerUrl, url);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.onlyofficeServerUrl);
+  }
+}

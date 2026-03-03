@@ -12,10 +12,12 @@ import {
   getWatchEnabled,
   getWatchFolder,
   getOnlyofficeJwtSecret,
+  getOnlyofficeServerUrl,
   saveSettings,
   setWatchEnabled,
   setWatchFolder,
   setOnlyofficeJwtSecret,
+  setOnlyofficeServerUrl,
 } from "../../storage";
 import { canUseRemoteData } from "../../services/entityService";
 import { refreshAllRemoteData, refreshEntitySchemas } from "../../services/deltaSyncService";
@@ -31,6 +33,7 @@ export default function SettingsTab() {
   const [watchPath, setWatchPath] = useState(() => getWatchFolder());
   const [watchOn, setWatchOn] = useState(() => getWatchEnabled());
   const [onlyofficeJwt, setOnlyofficeJwt] = useState(() => getOnlyofficeJwtSecret());
+  const [onlyofficeServerUrl, setOnlyofficeServerUrlState] = useState(() => getOnlyofficeServerUrl());
   const [report, setReport] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
 
@@ -45,9 +48,10 @@ export default function SettingsTab() {
       setWatchEnabled(watchOn);
       setWatchFolder(watchPath);
       setOnlyofficeJwtSecret(onlyofficeJwt);
+      setOnlyofficeServerUrl(onlyofficeServerUrl);
       setStatus("Settings saved");
     },
-    [apiKey, extensionToken, watchPath, watchOn, onlyofficeJwt, setStatus],
+    [apiKey, extensionToken, watchPath, watchOn, onlyofficeJwt, onlyofficeServerUrl, setStatus],
   );
 
   const buildReport = useCallback(() => {
@@ -182,6 +186,14 @@ export default function SettingsTab() {
             />
             Enable watched folder auto-import
           </label>
+
+          <label>ONLYOFFICE server URL</label>
+          <input
+            type="text"
+            placeholder="https://onlyoffice.yourdomain.com"
+            value={onlyofficeServerUrl}
+            onChange={(e) => setOnlyofficeServerUrlState(e.target.value)}
+          />
 
           <label>ONLYOFFICE JWT secret</label>
           <input

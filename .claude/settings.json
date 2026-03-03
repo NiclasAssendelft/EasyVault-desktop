@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add src/components/modals/PreviewEditModal.tsx)"
+    ]
+  }
+}
