@@ -118,8 +118,9 @@ export default function PreviewEditModal() {
       setStatusText("Downloading...");
       const bytes = await downloadFile(previewUrl);
       const savedPath = await invoke<string>("save_file_to_workspace", {
+        fileId: item!.id,
         filename: item!.title,
-        data: Array.from(bytes),
+        bytes: Array.from(bytes),
       });
       setStatusText("Opening...");
       await openPath(savedPath);

@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useUiStore } from "../stores/uiStore";
 import {
   refreshFilesFromRemote,
@@ -9,6 +8,9 @@ import {
   refreshSharedFromRemote,
   refreshDropzoneFromRemote,
 } from "../services/deltaSyncService";
+import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/onlyofficeService";
+import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
+import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
 import Sidebar from "./Sidebar";
 import HomeTab from "./tabs/HomeTab";
@@ -45,22 +47,51 @@ const TAB_REFRESH: Partial<Record<keyof typeof TAB_COMPONENTS, () => Promise<voi
   queue: refreshDropzoneFromRemote,
 };
 
-function setupOnlyofficeLocalRelay(): void {
-  void invoke("get_onlyoffice_relay_info");
-}
-
 export default function WorkspaceLayout() {
   const activeTab = useUiStore((s) => s.activeTab);
   const statusText = useUiStore((s) => s.statusText);
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
+  const queueItems = useQueueStore((s) => s.items);
 
   // Start delta-sync polling on mount, stop on unmount
   useDeltaSync();
 
-  // Set up OnlyOffice local relay on mount
+  // Set up ONLYOFFICE local relay and expose JS bridge on mount
   useEffect(() => {
-    setupOnlyofficeLocalRelay();
+    void setupOnlyofficeLocalRelay();
+
+    // Expose ONLYOFFICE launch bridge for the adapter
+    (window as unknown as { EasyVaultEditors?: Record<string, unknown> }).EasyVaultEditors = {
+      onlyofficeLaunch: (fileId: string) => { void launchOnlyofficeEditor(fileId); },
+    };
+
+    return () => {
+      delete (window as unknown as { EasyVaultEditors?: unknown }).EasyVaultEditors;
+    };
   }, []);
+
+  // Start/stop watch folder polling
+  useEffect(() => {
+    startWatchPolling();
+    return () => stopWatchPolling();
+  }, []);
+
+  // Listen for manual scan-now events dispatched by DropzoneTab
+  useEffect(() => {
+    const handler = () => {
+      void scanWatchFolder().then(() => processQueue());
+    };
+    window.addEventListener("easyvault:scan-watch-folder", handler);
+    return () => window.removeEventListener("easyvault:scan-watch-folder", handler);
+  }, []);
+
+  // Process queue whenever new items are queued
+  useEffect(() => {
+    const hasQueued = queueItems.some((x) => x.status === "queued");
+    if (hasQueued) {
+      void processQueue();
+    }
+  }, [queueItems]);
 
   // Refresh entity data when the active tab changes
   useEffect(() => {

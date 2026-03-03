@@ -1,5 +1,7 @@
+import { useCallback } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
+import { uploadSelectedFilesToFolder } from "../../services/fileOps";
 import FolderCard from "../lists/FolderCard";
 import ItemRow from "../lists/ItemRow";
 
@@ -15,6 +17,10 @@ export default function FilesTab() {
     ? items.filter((i) => i.folderId === activeFolderId)
     : items;
 
+  const handleUpload = useCallback(() => {
+    void uploadSelectedFilesToFolder(activeFolderId || "");
+  }, [activeFolderId]);
+
   if (activeFolder) {
     return (
       <section className="tab-panel">
@@ -23,7 +29,7 @@ export default function FilesTab() {
             ⌂ <span>›</span> <span>{activeFolder.name}</span>
           </div>
           <div className="actions-row file-head-actions">
-            <button type="button" className="ghost">Upload</button>
+            <button type="button" className="ghost" onClick={handleUpload}>Upload</button>
             <button type="button" onClick={openNewModal}>+ New</button>
           </div>
         </div>
@@ -52,7 +58,7 @@ export default function FilesTab() {
           <p className="page-subtitle">Folders and files</p>
         </div>
         <div className="actions-row file-head-actions">
-          <button type="button" className="ghost">Upload</button>
+          <button type="button" className="ghost" onClick={handleUpload}>Upload</button>
           <button type="button" onClick={openNewModal}>+ New</button>
         </div>
       </div>

@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   watchEnabled: "easyvault_watch_enabled",
   watchFolder: "easyvault_watch_folder",
   uploadedWatchSignatures: "easyvault_uploaded_watch_signatures",
+  onlyofficeJwtSecret: "easyvault_onlyoffice_jwt_secret",
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";

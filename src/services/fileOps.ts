@@ -10,24 +10,29 @@ import { safeEntityCreate, canUseRemoteData } from "./entityService";
 import { refreshAccessScope, syncRemoteDelta, refreshFilesFromRemote } from "./deltaSyncService";
 import { normalizeItem, extOf, asString, asArray, asBool, type FileItemType, type DesktopItem } from "./helpers";
 
-export async function uploadSelectedFilesToFolder(targetFolderId: string): Promise<void> {
+export async function uploadSelectedFilesToFolder(targetFolderId: string, preSuppliedFiles?: File[]): Promise<void> {
   // Check auth
   if (!canUseRemoteData()) { useUiStore.getState().setStatus("login required"); return; }
   const uploadToken = getPreferredUploadToken();
   if (!uploadToken) { useUiStore.getState().setStatus("missing upload token"); return; }
 
-  // Open file picker
-  const picker = document.createElement("input");
-  picker.type = "file";
-  picker.multiple = true;
-  picker.style.display = "none";
-  document.body.appendChild(picker);
-  const files = await new Promise<File[]>((resolve) => {
-    picker.addEventListener("change", () => resolve(picker.files ? Array.from(picker.files) : []), { once: true });
-    picker.click();
-  });
-  picker.remove();
-  if (files.length === 0) { useUiStore.getState().setStatus("upload canceled"); return; }
+  let files: File[];
+  if (preSuppliedFiles && preSuppliedFiles.length > 0) {
+    files = preSuppliedFiles;
+  } else {
+    // Open file picker
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.multiple = true;
+    picker.style.display = "none";
+    document.body.appendChild(picker);
+    files = await new Promise<File[]>((resolve) => {
+      picker.addEventListener("change", () => resolve(picker.files ? Array.from(picker.files) : []), { once: true });
+      picker.click();
+    });
+    picker.remove();
+    if (files.length === 0) { useUiStore.getState().setStatus("upload canceled"); return; }
+  }
 
   // Get space id
   const { personalSpaceId, accessibleSpaceIds } = useAuthStore.getState();

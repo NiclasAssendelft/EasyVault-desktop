@@ -71,3 +71,15 @@ export function getUploadedWatchSignatures(): Set<string> {
 export function saveUploadedWatchSignatures(signatures: Set<string>): void {
   localStorage.setItem(STORAGE_KEYS.uploadedWatchSignatures, JSON.stringify(Array.from(signatures)));
 }
+
+export function getOnlyofficeJwtSecret(): string {
+  return localStorage.getItem(STORAGE_KEYS.onlyofficeJwtSecret) || "";
+}
+
+export function setOnlyofficeJwtSecret(secret: string): void {
+  if (secret) {
+    localStorage.setItem(STORAGE_KEYS.onlyofficeJwtSecret, secret);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.onlyofficeJwtSecret);
+  }
+}

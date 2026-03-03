@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { invokeBase44Function, listVersions } from "../api";
-import { getPreferredUploadToken, getAuthToken, getApiKey } from "../storage";
+import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useUiStore } from "../stores/uiStore";
@@ -329,7 +329,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
 
     // Sign JWT
     const localOnlyofficeJwtSecret =
-      (localStorage.getItem("easyvault_onlyoffice_jwt_secret") || ONLYOFFICE_LOCAL_JWT_SECRET_FALLBACK).trim();
+      (getOnlyofficeJwtSecret() || ONLYOFFICE_LOCAL_JWT_SECRET_FALLBACK).trim();
     if (localOnlyofficeJwtSecret) {
       editorConfigNormalized.token = await signOnlyofficeConfigToken(editorConfigNormalized, localOnlyofficeJwtSecret);
     }

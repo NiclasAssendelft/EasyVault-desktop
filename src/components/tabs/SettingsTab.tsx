@@ -11,9 +11,11 @@ import {
   getSavedEmail,
   getWatchEnabled,
   getWatchFolder,
+  getOnlyofficeJwtSecret,
   saveSettings,
   setWatchEnabled,
   setWatchFolder,
+  setOnlyofficeJwtSecret,
 } from "../../storage";
 import { canUseRemoteData } from "../../services/entityService";
 import { refreshAllRemoteData, refreshEntitySchemas } from "../../services/deltaSyncService";
@@ -28,6 +30,7 @@ export default function SettingsTab() {
   );
   const [watchPath, setWatchPath] = useState(() => getWatchFolder());
   const [watchOn, setWatchOn] = useState(() => getWatchEnabled());
+  const [onlyofficeJwt, setOnlyofficeJwt] = useState(() => getOnlyofficeJwtSecret());
   const [report, setReport] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
 
@@ -41,9 +44,10 @@ export default function SettingsTab() {
       saveSettings(apiKey, extensionToken);
       setWatchEnabled(watchOn);
       setWatchFolder(watchPath);
+      setOnlyofficeJwtSecret(onlyofficeJwt);
       setStatus("Settings saved");
     },
-    [apiKey, extensionToken, watchPath, watchOn, setStatus],
+    [apiKey, extensionToken, watchPath, watchOn, onlyofficeJwt, setStatus],
   );
 
   const buildReport = useCallback(() => {
@@ -178,6 +182,14 @@ export default function SettingsTab() {
             />
             Enable watched folder auto-import
           </label>
+
+          <label>ONLYOFFICE JWT secret</label>
+          <input
+            type="password"
+            placeholder="Leave blank to use built-in default"
+            value={onlyofficeJwt}
+            onChange={(e) => setOnlyofficeJwt(e.target.value)}
+          />
 
           <button type="submit">Save Settings</button>
         </form>

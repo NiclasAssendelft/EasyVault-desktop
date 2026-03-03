@@ -558,6 +558,15 @@ h1 {
   padding: 56px 24px;
   text-align: center;
   background: #0d0d14;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone-box:hover {
+  border-color: #6c47ff;
+}
+.dropzone-box--active {
+  border-color: #6c47ff;
+  background: #13131f;
 }
 
 .dropzone-title {
