@@ -24,7 +24,6 @@ const RELAY_POLL_INTERVAL_MS = 1500;
 // ---------------------------------------------------------------------------
 
 export async function setupOnlyofficeLocalRelay(): Promise<void> {
-  const setStatus = useUiStore.getState().setStatus;
   try {
     const relayInfo = await invoke<{
       enabled?: boolean;
@@ -59,9 +58,9 @@ export async function setupOnlyofficeLocalRelay(): Promise<void> {
         apiKey: getApiKey(),
       });
     }
-    setStatus(`ONLYOFFICE relay ready on ${usePreviewEditStore.getState().onlyofficeRelayHostCallbackUrl}`);
+    console.log(`ONLYOFFICE relay ready on ${usePreviewEditStore.getState().onlyofficeRelayHostCallbackUrl}`);
   } catch (err) {
-    setStatus(`ONLYOFFICE relay init failed: ${String(err)}`);
+    console.warn("ONLYOFFICE relay init failed:", err);
   }
 }
 
@@ -176,34 +175,21 @@ export async function startOnlyofficeRelayPolling(): Promise<void> {
   stopOnlyofficeRelayPolling();
   usePreviewEditStore.getState().setOnlyofficeRelayLastSeenCount(0);
 
-  const setStatus = useUiStore.getState().setStatus;
-
   const pull = async () => {
     try {
       const stats = await invoke<RelayStats>("get_onlyoffice_relay_stats");
       const count = Number(stats.callback_count || 0);
-      const status = stats.last_status ?? "-";
-      const commitMethod = stats.last_commit_method ?? "-";
       const saveStatus = stats.last_save_status ?? "-";
-      const saveUpstream = stats.last_save_upstream_status ?? "-";
-      const saveCommitMethod = stats.last_save_commit_method ?? "-";
-      const saveUpstreamBody = typeof stats.last_save_upstream_body === "string" ? stats.last_save_upstream_body : "";
-      const upstreamBody = typeof stats.last_upstream_body === "string" ? stats.last_upstream_body : "";
 
       if (stats.last_error) {
-        setStatus(`relay error: ${stats.last_error}`);
+        console.warn("ONLYOFFICE relay error:", stats.last_error);
       } else if (stats.last_save_error) {
-        setStatus(`relay save error: ${stats.last_save_error}`);
+        console.warn("ONLYOFFICE relay save error:", stats.last_save_error);
       } else {
-        setStatus(
-          `relay callbacks: ${count} | callback status: ${status} | save status: ${saveStatus} | save upstream: ${saveUpstream} | save commit: ${saveCommitMethod}`,
-        );
-
         const lastSeen = usePreviewEditStore.getState().onlyofficeRelayLastSeenCount;
         if (count > lastSeen) {
           usePreviewEditStore.getState().setOnlyofficeRelayLastSeenCount(count);
           if (saveStatus === 6 || saveStatus === 2) {
-            setStatus("ONLYOFFICE save callback received, syncing...");
             await syncRemoteDelta();
             const activeFileId = usePreviewEditStore.getState().onlyofficeActiveFileId;
             if (activeFileId) {
@@ -215,45 +201,16 @@ export async function startOnlyofficeRelayPolling(): Promise<void> {
                 const baseline = usePreviewEditStore.getState().onlyofficeBaselineVersionCount;
                 if (newCount > baseline) {
                   usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(newCount);
-                  setStatus(`ONLYOFFICE save synced (${newCount} versions)`);
-                } else {
-                  const upstreamSummary = saveUpstreamBody
-                    ? ` | upstream body: ${saveUpstreamBody.slice(0, 120)}`
-                    : upstreamBody
-                      ? ` | upstream body: ${upstreamBody.slice(0, 120)}`
-                      : "";
-                  const methodSummary =
-                    saveCommitMethod && saveCommitMethod !== "-"
-                      ? ` | commit: ${saveCommitMethod}`
-                      : commitMethod
-                        ? ` | commit: ${commitMethod}`
-                        : "";
-                  setStatus(`ONLYOFFICE callback received but no new version was created${methodSummary}${upstreamSummary}`);
                 }
               } catch (err) {
-                setStatus(`ONLYOFFICE save sync check failed: ${String(err)}`);
+                console.warn("ONLYOFFICE save sync check failed:", err);
               }
-            } else {
-              setStatus("ONLYOFFICE save synced to desktop");
-            }
-          } else {
-            const method = saveCommitMethod && saveCommitMethod !== "-" ? saveCommitMethod : commitMethod;
-            if (method === "skipped_file_not_found_callback" || method === "skipped_non_vault_key") {
-              setStatus("ONLYOFFICE print/export callback acknowledged");
-            } else if (status === 1) {
-              setStatus("ONLYOFFICE session callback received");
-            } else if (status === 4) {
-              setStatus("ONLYOFFICE session closed callback received");
-            } else if (status === 7) {
-              setStatus("ONLYOFFICE force-save error callback received");
-            } else {
-              setStatus(`ONLYOFFICE callback received (status ${status})`);
             }
           }
         }
       }
     } catch (err) {
-      useUiStore.getState().setStatus(`relay stats failed: ${String(err)}`);
+      console.warn("relay stats failed:", err);
     }
   };
 
@@ -271,7 +228,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
   const setStatus = useUiStore.getState().setStatus;
 
   if (!item) {
-    setStatus("ONLYOFFICE launch failed: item not found");
+    console.warn("ONLYOFFICE launch failed: item not found");
     return;
   }
 
@@ -337,9 +294,9 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
       editorConfigNormalized.token = await signOnlyofficeConfigToken(editorConfigNormalized, localOnlyofficeJwtSecret);
     }
 
-    setStatus(`ONLYOFFICE: loading API from ${documentServerUrl}`);
+    console.log(`ONLYOFFICE: loading API from ${documentServerUrl}`);
     await ensureOnlyofficeApi(documentServerUrl);
-    setStatus("ONLYOFFICE: API loaded");
+    console.log("ONLYOFFICE: API loaded");
 
     // Find the host element created by the adapter in the modal body.
     // Fall back to appending to document.body if opened outside a modal.
@@ -366,7 +323,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     const normalizedEditorConfigForUi = (editorConfigNormalized.editorConfig as Record<string, unknown> | undefined) || {};
     const normalizedCustomization = (normalizedEditorConfigForUi.customization as Record<string, unknown> | undefined) || {};
 
-    setStatus(`ONLYOFFICE: callback via relay ${asString(normalizedEditorConfigForUi.callbackUrl) || containerCallbackUrl}`);
+    console.log(`ONLYOFFICE: callback via relay ${asString(normalizedEditorConfigForUi.callbackUrl) || containerCallbackUrl}`);
 
     const editorConfig = {
       ...editorConfigNormalized,
@@ -381,23 +338,20 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
       },
       events: {
         ...(editorConfigNormalized.events as Record<string, unknown> | undefined),
-        onAppReady: () => setStatus(`ONLYOFFICE ready: ${item.title}`),
-        onDocumentStateChange: (evt: { data?: boolean }) => {
-          if (evt?.data) setStatus("document changed (unsaved)");
-          else setStatus("document state clean");
-        },
-        onRequestPrint: () => setStatus("ONLYOFFICE print requested..."),
+        onAppReady: () => { setStatus(""); console.log(`ONLYOFFICE ready: ${item.title}`); },
+        onDocumentStateChange: () => {},
+        onRequestPrint: () => console.log("ONLYOFFICE print requested"),
         onError: (evt: { data?: { errorDescription?: string } }) =>
           setStatus(`ONLYOFFICE error: ${evt?.data?.errorDescription || "unknown"}`),
         onRequestClose: () => {
-          setStatus("ONLYOFFICE editor closed");
+          setStatus("");
           stopOnlyofficeRelayPolling();
           void syncRemoteDelta();
         },
       },
     };
 
-    setStatus("ONLYOFFICE: creating editor");
+    console.log("ONLYOFFICE: creating editor");
     const editorInstance = new DocsAPI.DocEditor("onlyoffice-editor-host", editorConfig);
     usePreviewEditStore.getState().setOnlyofficeEditor(editorInstance);
 
@@ -405,7 +359,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     window.setTimeout(() => { window.dispatchEvent(new Event("resize")); }, 50);
     window.setTimeout(() => { window.dispatchEvent(new Event("resize")); }, 250);
 
-    setStatus("ONLYOFFICE: editor mounted");
+    console.log("ONLYOFFICE: editor mounted");
     await startOnlyofficeRelayPolling();
   } catch (err) {
     setStatus(`ONLYOFFICE launch failed: ${String(err)}`);

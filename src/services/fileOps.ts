@@ -12,9 +12,9 @@ import { normalizeItem, extOf, asString, asArray, asBool, type FileItemType, typ
 
 export async function uploadSelectedFilesToFolder(targetFolderId: string, preSuppliedFiles?: File[]): Promise<void> {
   // Check auth
-  if (!canUseRemoteData()) { useUiStore.getState().setStatus("login required"); return; }
+  if (!canUseRemoteData()) { console.warn("upload skipped: login required"); return; }
   const uploadToken = getPreferredUploadToken();
-  if (!uploadToken) { useUiStore.getState().setStatus("missing upload token"); return; }
+  if (!uploadToken) { console.warn("upload skipped: missing upload token"); return; }
 
   let files: File[];
   if (preSuppliedFiles && preSuppliedFiles.length > 0) {
@@ -31,7 +31,7 @@ export async function uploadSelectedFilesToFolder(targetFolderId: string, preSup
       picker.click();
     });
     picker.remove();
-    if (files.length === 0) { useUiStore.getState().setStatus("upload canceled"); return; }
+    if (files.length === 0) return;
   }
 
   // Get space id
@@ -106,6 +106,98 @@ export async function uploadSelectedFilesToFolder(targetFolderId: string, preSup
     const store = useFilesStore.getState();
     if (store.activeFolderId !== targetFolderId) store.setActiveFolderId(targetFolderId);
     setStatus(`uploaded ${uploaded} file${uploaded === 1 ? "" : "s"}`);
+  }
+}
+
+export async function uploadSelectedFilesToSpace(spaceId: string, preSuppliedFiles?: File[]): Promise<void> {
+  if (!canUseRemoteData()) { console.warn("upload skipped: login required"); return; }
+  const uploadToken = getPreferredUploadToken();
+  if (!uploadToken) { console.warn("upload skipped: missing upload token"); return; }
+
+  let files: File[];
+  if (preSuppliedFiles && preSuppliedFiles.length > 0) {
+    files = preSuppliedFiles;
+  } else {
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.multiple = true;
+    picker.style.display = "none";
+    document.body.appendChild(picker);
+    files = await new Promise<File[]>((resolve) => {
+      picker.addEventListener("change", () => resolve(picker.files ? Array.from(picker.files) : []), { once: true });
+      picker.click();
+    });
+    picker.remove();
+    if (files.length === 0) return;
+  }
+
+  const setStatus = useUiStore.getState().setStatus;
+  const filesStore = useFilesStore.getState();
+  let uploaded = 0;
+
+  for (const file of files) {
+    const tempId = `temp-upload-${crypto.randomUUID()}`;
+    const tempItem = normalizeItem({
+      id: tempId,
+      title: file.name,
+      itemType: "uploaded_file",
+      folderId: "",
+      createdAtIso: new Date().toISOString(),
+      isUploading: true,
+      fileExtension: extOf(file.name),
+      spaceId,
+    });
+    filesStore.addItem(tempItem);
+
+    try {
+      setStatus(`uploading ${file.name}...`);
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const fileUrl = await uploadFileWithToken(uploadToken, file.name, bytes);
+      const ext = extOf(file.name);
+      const created = await safeEntityCreate<Record<string, unknown>>("VaultItem", {
+        title: file.name,
+        item_type: "uploaded_file",
+        folder_id: "",
+        space_id: spaceId,
+        source: "local_upload",
+        stored_file_url: fileUrl,
+        file_extension: ext,
+        file_size: file.size,
+      });
+      const createdId = asString(created.id);
+      if (createdId) {
+        const nextItem = normalizeItem({
+          id: createdId,
+          title: asString(created.title, file.name),
+          itemType: asString(created.item_type, "uploaded_file") as FileItemType,
+          folderId: asString(created.folder_id, ""),
+          createdAtIso: asString(created.created_date, new Date().toISOString()),
+          updatedAtIso: asString(created.updated_date, asString(created.created_date, new Date().toISOString())),
+          notes: asString(created.notes),
+          tags: asArray(created.tags),
+          isPinned: asBool(created.is_pinned),
+          isFavorite: asBool(created.is_favorite),
+          storedFileUrl: asString(created.stored_file_url, fileUrl),
+          fileExtension: asString(created.file_extension, ext),
+          spaceId,
+        });
+        useFilesStore.getState().removeItem(tempId);
+        useFilesStore.getState().addItem(nextItem);
+        useSyncStore.getState().setEntityUpdatedAt("VaultItem", createdId, nextItem.updatedAtIso || nextItem.createdAtIso);
+        useFilesStore.getState().persist();
+      }
+      uploaded += 1;
+    } catch (err) {
+      useFilesStore.getState().removeItem(tempId);
+      setStatus(`upload failed for ${file.name}: ${String(err)}`);
+    }
+  }
+
+  if (uploaded > 0) {
+    void syncRemoteDelta();
+    void refreshFilesFromRemote();
+    setStatus(`uploaded ${uploaded} file${uploaded === 1 ? "" : "s"} to space`);
   }
 }
 

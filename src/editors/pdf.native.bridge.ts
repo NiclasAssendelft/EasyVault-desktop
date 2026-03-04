@@ -55,7 +55,7 @@ export async function startAutoSync(
       onStatus: setStatus,
       onResult: () => {},
       onCurrentFile: () => {},
-      onLastSync: (iso) => setStatus(`Last sync: ${iso}`),
+      onLastSync: (iso) => console.log(`Last sync: ${iso}`),
     },
   );
 }

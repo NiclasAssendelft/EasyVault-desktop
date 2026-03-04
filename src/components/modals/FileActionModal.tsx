@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useUiStore } from "../../stores/uiStore";
 import { useFilesStore } from "../../stores/filesStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -9,7 +9,8 @@ import { useSyncStore } from "../../stores/syncStore";
 import { getSavedEmail } from "../../storage";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
-import { fileKindFromItem, asString, getPreviewUrlForItem } from "../../services/helpers";
+import { fileKindFromItem, asString, getPreviewUrlForItem, toDisplayName } from "../../services/helpers";
+import { invokeBase44Function } from "../../api";
 import { useT } from "../../i18n";
 
 function canEditBySpace(spaceId: string, createdBy: string): boolean {
@@ -106,6 +107,81 @@ export default function FileActionModal() {
           <button type="button" className="ghost" onClick={handleEditInApp}>{t("fileAction.editInApp")}</button>
           <button type="button" className="ghost" onClick={handleManage} disabled={!canEdit}>{t("fileAction.manage")}</button>
         </div>
+        {item.spaceId && <FileCommentsSection itemId={item.id} spaceId={item.spaceId} />}
+      </div>
+    </div>
+  );
+}
+
+type FileComment = {
+  id: string;
+  item_id: string;
+  sender_email: string;
+  sender_name: string;
+  message: string;
+  created_at: string;
+};
+
+function FileCommentsSection({ itemId, spaceId }: { itemId: string; spaceId: string }) {
+  const t = useT();
+  const [comments, setComments] = useState<FileComment[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      const res = await invokeBase44Function<{ comments?: FileComment[] }>("fileComments", { item_id: itemId, action: "list" });
+      setComments(res.comments || []);
+    } catch { /* ignore */ }
+  }, [itemId]);
+
+  useEffect(() => {
+    fetchComments();
+    const timer = setInterval(fetchComments, 8000);
+    return () => clearInterval(timer);
+  }, [fetchComments]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [comments.length]);
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    setSending(true);
+    try {
+      const me = getSavedEmail().trim().toLowerCase();
+      await invokeBase44Function("fileComments", {
+        item_id: itemId,
+        space_id: spaceId,
+        action: "create",
+        message: input.trim(),
+        sender_name: toDisplayName(me),
+      });
+      setInput("");
+      await fetchComments();
+    } catch { /* ignore */ }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="file-comments-section">
+      <h4 className="file-comments-heading">{t("shared.fileComments")}</h4>
+      <div className="file-comments-list">
+        {comments.length === 0 && <p className="file-comments-empty">{t("shared.noComments")}</p>}
+        {comments.map((c) => (
+          <div key={c.id} className="file-comment-row">
+            <strong>{c.sender_name || toDisplayName(c.sender_email)}</strong>
+            <span className="file-comment-time">{new Date(c.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+            <p className="file-comment-text">{c.message}</p>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+      <div className="file-comments-input-row">
+        <input type="text" placeholder={t("shared.addComment")} value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }} />
+        <button type="button" onClick={handleSend} disabled={sending || !input.trim()}>{t("shared.sendMessage")}</button>
       </div>
     </div>
   );

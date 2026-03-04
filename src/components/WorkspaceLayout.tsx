@@ -97,7 +97,7 @@ function LocaleDropdown({ locale, setLocale }: { locale: Locale; setLocale: (l: 
 
 export default function WorkspaceLayout() {
   const activeTab = useUiStore((s) => s.activeTab);
-  const statusText = useUiStore((s) => s.statusText);
+
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
   const queueItems = useQueueStore((s) => s.items);
   const t = useT();
@@ -164,7 +164,6 @@ export default function WorkspaceLayout() {
             <kbd>&#x2318;K</kbd>
           </div>
           <LocaleDropdown locale={locale} setLocale={setLocale} />
-          <p>{t("header.status", { status: statusText })}</p>
         </header>
         <ActiveTabComponent />
       </section>

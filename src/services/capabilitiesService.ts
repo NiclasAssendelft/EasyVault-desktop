@@ -4,7 +4,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useRemoteDataStore } from "../stores/remoteDataStore";
 import { useSyncStore } from "../stores/syncStore";
-import { useUiStore } from "../stores/uiStore";
+
 import { safeEntityCreate, deleteRemoteEntity, canUseRemoteData } from "./entityService";
 import {
   refreshAllRemoteData,
@@ -90,14 +90,13 @@ export type SyncHealthResult = {
 
 export async function runSyncHealthCheck(): Promise<SyncHealthResult> {
   if (!canUseRemoteData()) {
-    useUiStore.getState().setStatus("sync health check requires login");
+    console.warn("sync health check requires login");
     return { passed: false, report: "FAIL: login required", finishedAt: new Date().toISOString() };
   }
 
-  const setStatus = useUiStore.getState().setStatus;
   const sync = useSyncStore.getState();
   const auth = useAuthStore.getState();
-  setStatus("sync health check running...");
+  console.log("sync health check running...");
 
   const startedAt = Date.now();
   const lines: string[] = [];
@@ -209,14 +208,14 @@ export async function runSyncHealthCheck(): Promise<SyncHealthResult> {
 
     const durationMs = Date.now() - startedAt;
     lines.unshift(`Sync Health Check: PASS (${durationMs}ms)`);
-    setStatus("sync health check passed");
+    console.log("sync health check passed");
 
     const finishedAt = new Date().toISOString();
     return { passed: true, report: [`Finished: ${finishedAt}`, ...lines].join("\n"), finishedAt };
   } catch (err) {
     pushHealthLine(lines, false, "Run error", String(err));
     lines.unshift("Sync Health Check: FAIL");
-    setStatus(`sync health check failed: ${String(err)}`);
+    console.warn("sync health check failed:", err);
 
     const finishedAt = new Date().toISOString();
     return { passed: false, report: [`Finished: ${finishedAt}`, ...lines].join("\n"), finishedAt };

@@ -11,7 +11,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useRemoteDataStore } from "../stores/remoteDataStore";
 import { useSyncStore } from "../stores/syncStore";
-import { useUiStore } from "../stores/uiStore";
+
 
 function currentUserEmail(): string {
   return getSavedEmail().trim().toLowerCase();
@@ -54,7 +54,6 @@ async function cleanupOnlyofficeRelayTempItems(items: DesktopItem[]): Promise<vo
   if (!token) return;
   const tempItems = items.filter((x) => isOnlyofficeRelayTempTitle(x.title));
   if (tempItems.length === 0) return;
-  const setStatus = useUiStore.getState().setStatus;
   let removed = 0;
   let failed = 0;
   for (const item of tempItems) {
@@ -70,14 +69,13 @@ async function cleanupOnlyofficeRelayTempItems(items: DesktopItem[]): Promise<vo
     }
   }
   if (removed > 0 || failed > 0) {
-    setStatus(`relay temp cleanup: removed ${removed}, failed ${failed}`);
+    console.log(`relay temp cleanup: removed ${removed}, failed ${failed}`);
   }
 }
 
 export async function refreshFilesFromRemote(): Promise<void> {
   if (!canUseRemoteData()) return;
   await refreshAccessScope();
-  const setStatus = useUiStore.getState().setStatus;
   try {
     const [folders, items] = await Promise.all([
       entityList<Record<string, unknown>>("Folder", "-created_date", 500),
@@ -142,7 +140,7 @@ export async function refreshFilesFromRemote(): Promise<void> {
     filesStore.setItems(newItems);
     filesStore.persist();
   } catch (err) {
-    setStatus(`remote files sync failed: ${String(err)}`);
+    console.warn("remote files sync failed:", err);
   }
 }
 
@@ -160,7 +158,7 @@ export async function refreshEmailFromRemote(): Promise<void> {
     }
     useRemoteDataStore.getState().setEmails(emails);
   } catch (err) {
-    useUiStore.getState().setStatus(`email sync failed: ${String(err)}`);
+    console.warn("email sync failed:", err);
   }
 }
 
@@ -178,7 +176,7 @@ export async function refreshCalendarFromRemote(): Promise<void> {
     }
     useRemoteDataStore.getState().setEvents(events);
   } catch (err) {
-    useUiStore.getState().setStatus(`calendar sync failed: ${String(err)}`);
+    console.warn("calendar sync failed:", err);
   }
 }
 
@@ -196,7 +194,7 @@ export async function refreshVaultFromRemote(): Promise<void> {
     }
     useRemoteDataStore.getState().setPacks(packs);
   } catch (err) {
-    useUiStore.getState().setStatus(`vault sync failed: ${String(err)}`);
+    console.warn("vault sync failed:", err);
   }
 }
 
@@ -222,7 +220,7 @@ export async function refreshSharedFromRemote(): Promise<void> {
     }
     useRemoteDataStore.getState().setSpaces(filtered);
   } catch (err) {
-    useUiStore.getState().setStatus(`shared sync failed: ${String(err)}`);
+    console.warn("shared sync failed:", err);
   }
 }
 
@@ -233,7 +231,7 @@ export async function refreshDropzoneFromRemote(): Promise<void> {
     const filtered = items.filter((row) => spaceAllowed(asString(row.space_id)) && isOwnedByCurrentUser(row));
     useRemoteDataStore.getState().setDropzoneItems(filtered);
   } catch (err) {
-    useUiStore.getState().setStatus(`dropzone sync failed: ${String(err)}`);
+    console.warn("dropzone sync failed:", err);
   }
 }
 
@@ -271,7 +269,6 @@ export async function refreshEntitySchemas(): Promise<void> {
   if (!canUseRemoteData()) return;
   // entitySchemas is a Base44-only endpoint; skip when using Supabase
   if (BACKEND === "supabase") return;
-  const setStatus = useUiStore.getState().setStatus;
   const sync = useSyncStore.getState();
   try {
     const rawPayload = await invokeBase44Function<unknown>("entitySchemas", {});
@@ -290,7 +287,7 @@ export async function refreshEntitySchemas(): Promise<void> {
     }
     sync.setSchemaInfo(payload.generated_at, payload.version, payload.functions.length);
   } catch (err) {
-    setStatus(`entitySchemas parse failed: ${String(err)}`);
+    console.warn("entitySchemas parse failed:", err);
   }
 }
 
@@ -310,7 +307,6 @@ export async function refreshAllRemoteData(): Promise<void> {
 export async function syncRemoteDelta(): Promise<void> {
   if (!canUseRemoteData()) return;
   const sync = useSyncStore.getState();
-  const setStatus = useUiStore.getState().setStatus;
   try {
     const since = sync.lastDeltaSyncIso || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const result = await callDeltaSync(since);
@@ -494,7 +490,7 @@ export async function syncRemoteDelta(): Promise<void> {
 
     useFilesStore.getState().persist();
   } catch (err) {
-    setStatus(`delta sync failed: ${String(err)}`);
+    console.warn("delta sync failed:", err);
   }
 }
 

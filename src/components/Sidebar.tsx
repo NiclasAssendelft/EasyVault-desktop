@@ -4,15 +4,15 @@ import { useT } from "../i18n";
 import type { TabName } from "../services/helpers";
 import type { TKey } from "../i18n";
 
-const TABS: { name: TabName; labelKey: TKey }[] = [
-  { name: "home", labelKey: "nav.home" },
-  { name: "files", labelKey: "nav.files" },
-  { name: "email", labelKey: "nav.email" },
-  { name: "calendar", labelKey: "nav.calendar" },
-  { name: "vault", labelKey: "nav.vault" },
-  { name: "shared", labelKey: "nav.shared" },
-  { name: "queue", labelKey: "nav.dropzone" },
-  { name: "settings", labelKey: "nav.settings" },
+const TABS: { name: TabName; labelKey: TKey; icon: string }[] = [
+  { name: "home", labelKey: "nav.home", icon: "\u{1F3E0}" },
+  { name: "files", labelKey: "nav.files", icon: "\u{1F4C1}" },
+  { name: "email", labelKey: "nav.email", icon: "\u{1F4E7}" },
+  { name: "calendar", labelKey: "nav.calendar", icon: "\u{1F4C5}" },
+  { name: "vault", labelKey: "nav.vault", icon: "\u{1F512}" },
+  { name: "shared", labelKey: "nav.shared", icon: "\u{1F465}" },
+  { name: "queue", labelKey: "nav.dropzone", icon: "\u{1F4E5}" },
+  { name: "settings", labelKey: "nav.settings", icon: "\u2699\uFE0F" },
 ];
 
 export default function Sidebar() {
@@ -27,10 +27,9 @@ export default function Sidebar() {
         <div className="brand-row">
           <img
             className="brand-logo"
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/69970fbb1f1de2b0bede99df/daa74d4e3_ChatGPTImageFeb20202605_11_56PM.png"
+            src="/src/assets/logo.png"
             alt="EasyVault"
           />
-          <h2>EasyVault</h2>
         </div>
       </div>
       <nav className="nav-list">
@@ -40,7 +39,7 @@ export default function Sidebar() {
             className={`nav-btn${activeTab === tab.name ? " active" : ""}`}
             onClick={() => setActiveTab(tab.name)}
           >
-            {t(tab.labelKey)}
+            <span className="nav-btn-icon">{tab.icon}</span>{t(tab.labelKey)}
           </button>
         ))}
       </nav>
