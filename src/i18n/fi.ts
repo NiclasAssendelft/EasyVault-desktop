@@ -74,6 +74,17 @@ const fi: Record<keyof typeof en, string> = {
   "home.goToCalendar": "Avaa kalenteri",
   "home.goToShared": "Avaa jaetut",
   "home.goToVault": "Avaa holvi",
+  "home.todaySchedule": "Päivän aikataulu",
+  "home.noSchedule": "Ei aikataulua tälle päivälle",
+  "home.pinnedItems": "Kiinnitetyt kohteet",
+  "home.noPinned": "Ei kiinnitettyjä kohteita",
+  "home.upcomingMeetingsPanel": "Tulevat kokoukset",
+  "home.noMeetings": "Ei tulevia kokouksia",
+  "home.recentFiles": "Viimeaikaiset tiedostot",
+  "home.noRecentFiles": "Ei viimeaikaisia tiedostoja vielä",
+  "home.importantEmails": "Tärkeät sähköpostit",
+  "home.noImportantEmails": "Ei tärkeitä sähköposteja",
+  "home.viewAll": "Näytä kaikki",
 
   // FilesTab
   "files.title": "Tiedostot",

@@ -72,6 +72,17 @@ const en = {
   "home.goToCalendar": "Open Calendar",
   "home.goToShared": "Open Shared",
   "home.goToVault": "Open Vault",
+  "home.todaySchedule": "Today's Schedule",
+  "home.noSchedule": "Nothing scheduled for today",
+  "home.pinnedItems": "Pinned Items",
+  "home.noPinned": "No pinned items",
+  "home.upcomingMeetingsPanel": "Upcoming Meetings",
+  "home.noMeetings": "No upcoming meetings",
+  "home.recentFiles": "Recent Files",
+  "home.noRecentFiles": "No recent files yet",
+  "home.importantEmails": "Important Emails",
+  "home.noImportantEmails": "No important emails",
+  "home.viewAll": "View all",
 
   // FilesTab
   "files.title": "Files",

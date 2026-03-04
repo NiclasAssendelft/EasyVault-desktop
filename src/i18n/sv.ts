@@ -74,6 +74,17 @@ const sv: Record<keyof typeof en, string> = {
   "home.goToCalendar": "Öppna kalender",
   "home.goToShared": "Öppna delat",
   "home.goToVault": "Öppna valv",
+  "home.todaySchedule": "Dagens schema",
+  "home.noSchedule": "Inget schemalagt för idag",
+  "home.pinnedItems": "Fästa objekt",
+  "home.noPinned": "Inga fästa objekt",
+  "home.upcomingMeetingsPanel": "Kommande möten",
+  "home.noMeetings": "Inga kommande möten",
+  "home.recentFiles": "Senaste filer",
+  "home.noRecentFiles": "Inga senaste filer ännu",
+  "home.importantEmails": "Viktiga e-postmeddelanden",
+  "home.noImportantEmails": "Inga viktiga e-postmeddelanden",
+  "home.viewAll": "Visa alla",
 
   // FilesTab
   "files.title": "Filer",
