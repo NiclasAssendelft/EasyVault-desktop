@@ -4,7 +4,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { asString, toDisplayName } from "../../services/helpers";
 import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService";
-import { refreshSharedFromRemote } from "../../services/deltaSyncService";
+import { refreshSharedFromRemote, refreshAccessScope } from "../../services/deltaSyncService";
 import { invokeBase44Function } from "../../api";
 import { getSavedEmail } from "../../storage";
 import { useT, t } from "../../i18n";
@@ -174,6 +174,7 @@ export default function SharedTab() {
     try {
       await safeEntityCreate("Space", { name: newName.trim(), description: newDesc.trim(), space_type: "shared", members: [] });
       setStatus(t("shared.created", { name: newName.trim() }));
+      await refreshAccessScope();
       await refreshSharedFromRemote();
       setCreateOpen(false);
       setNewName("");
