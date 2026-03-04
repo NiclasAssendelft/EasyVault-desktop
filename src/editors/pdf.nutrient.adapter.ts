@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
+import { t } from "../i18n";
 
 // Lazy-load PDF.js to keep the main bundle small
 async function loadPdfJs() {
@@ -12,14 +13,10 @@ async function loadPdfJs() {
   return pdfjs;
 }
 
-// ---------------------------------------------------------------------------
-// Preview state
-// ---------------------------------------------------------------------------
-
 type PdfPreviewState = {
   currentPage: number;
   totalPages: number;
-  zoomLevel: number; // 0 = fit-width, positive = zoom steps above fit
+  zoomLevel: number;
   pdfBytes: Uint8Array | null;
   pdfDoc: ReturnType<Awaited<ReturnType<typeof loadPdfJs>>["getDocument"]> extends { promise: Promise<infer D> } ? D : unknown;
 };
@@ -31,18 +28,9 @@ function getPreviewState(ctx: AdapterRenderContext): PdfPreviewState {
   return ctx.draft._pdf as PdfPreviewState;
 }
 
-// ---------------------------------------------------------------------------
-// Shared rendering helper
-// ---------------------------------------------------------------------------
-
-async function renderPage(
-  canvasWrap: HTMLElement,
-  state: PdfPreviewState,
-): Promise<void> {
+async function renderPage(canvasWrap: HTMLElement, state: PdfPreviewState): Promise<void> {
   if (!state.pdfBytes) return;
   const pdfjs = await loadPdfJs();
-
-  // Reuse cached document or load fresh
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let doc = state.pdfDoc as any;
   if (!doc) {
@@ -52,75 +40,52 @@ async function renderPage(
     (state as any).pdfDoc = doc;
     state.totalPages = doc.numPages;
   }
-
   const pageIndex = state.currentPage;
   if (pageIndex < 0 || pageIndex >= state.totalPages) return;
-
-  const page = await doc.getPage(pageIndex + 1); // PDF.js is 1-indexed
-
-  // Calculate scale: fit page width to container, then apply zoom
-  const containerWidth = canvasWrap.clientWidth - 32; // subtract padding
+  const page = await doc.getPage(pageIndex + 1);
+  const containerWidth = canvasWrap.clientWidth - 32;
   const baseViewport = page.getViewport({ scale: 1.0 });
   const fitScale = containerWidth / baseViewport.width;
   const scale = fitScale * (1 + state.zoomLevel * 0.25);
-
   const viewport = page.getViewport({ scale });
-
-  // HiDPI: render at device pixel ratio for crisp text
   const dpr = window.devicePixelRatio || 1;
-
   const existing = canvasWrap.querySelector<HTMLCanvasElement>(".pdf-page-canvas");
   if (existing) existing.remove();
-
   const canvas = document.createElement("canvas");
   canvas.className = "pdf-page-canvas";
-  // Set the actual pixel dimensions (high-res)
   canvas.width = Math.floor(viewport.width * dpr);
   canvas.height = Math.floor(viewport.height * dpr);
-  // Set the CSS display dimensions
   canvas.style.width = `${Math.floor(viewport.width)}px`;
   canvas.style.height = `${Math.floor(viewport.height)}px`;
-
   const renderCtx = canvas.getContext("2d");
   if (!renderCtx) return;
-
-  // Scale the context to match device pixel ratio
   renderCtx.scale(dpr, dpr);
-
   canvasWrap.appendChild(canvas);
-
   await page.render({ canvasContext: renderCtx, viewport, canvas }).promise;
 }
-
-// ---------------------------------------------------------------------------
-// Adapter
-// ---------------------------------------------------------------------------
 
 export const pdfNutrientAdapter: EditorAdapter = {
   kind: "pdf",
   canEdit: () => true,
 
-  // --- Preview mode: in-app PDF.js viewer ---
   openPreview(ctx: AdapterRenderContext): void {
     const source = ctx.getPreviewUrl(ctx.item);
     if (!source) {
-      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">No PDF preview URL available</div>`;
+      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">${t("pdf.noPreviewUrl")}</div>`;
       return;
     }
-
     const state = getPreviewState(ctx);
-
     ctx.bodyEl.innerHTML = `
       <div class="pdf-viewer">
         <div class="pdf-toolbar">
-          <button type="button" class="ghost pdf-btn" id="pdf-prev" title="Previous page">&#9664;</button>
-          <span id="pdf-page-info" class="pdf-page-info">Loading...</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-next" title="Next page">&#9654;</button>
+          <button type="button" class="ghost pdf-btn" id="pdf-prev" title="${t("pdf.prevPage")}">&#9664;</button>
+          <span id="pdf-page-info" class="pdf-page-info">${t("pdf.loading")}</span>
+          <button type="button" class="ghost pdf-btn" id="pdf-next" title="${t("pdf.nextPage")}">&#9654;</button>
           <span class="pdf-toolbar-sep">|</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-out" title="Zoom out">&minus;</button>
-          <span id="pdf-zoom-info" class="pdf-page-info">Fit</span>
-          <button type="button" class="ghost pdf-btn" id="pdf-zoom-in" title="Zoom in">&plus;</button>
-          <button type="button" class="ghost pdf-btn pdf-btn-sm" id="pdf-zoom-reset" title="Reset zoom">Fit width</button>
+          <button type="button" class="ghost pdf-btn" id="pdf-zoom-out" title="${t("pdf.zoomOut")}">&minus;</button>
+          <span id="pdf-zoom-info" class="pdf-page-info">${t("pdf.fit")}</span>
+          <button type="button" class="ghost pdf-btn" id="pdf-zoom-in" title="${t("pdf.zoomIn")}">&plus;</button>
+          <button type="button" class="ghost pdf-btn pdf-btn-sm" id="pdf-zoom-reset" title="${t("pdf.resetZoom")}">${t("pdf.fitWidth")}</button>
         </div>
         <div class="pdf-canvas-wrap" id="pdf-canvas-wrap"></div>
       </div>
@@ -132,7 +97,7 @@ export const pdfNutrientAdapter: EditorAdapter = {
 
     function updateInfo() {
       pageInfo.textContent = `${state.currentPage + 1} / ${state.totalPages}`;
-      zoomInfo.textContent = state.zoomLevel === 0 ? "Fit" : `${Math.round((1 + state.zoomLevel * 0.25) * 100)}%`;
+      zoomInfo.textContent = state.zoomLevel === 0 ? t("pdf.fit") : `${Math.round((1 + state.zoomLevel * 0.25) * 100)}%`;
     }
 
     async function renderCurrent() {
@@ -141,7 +106,6 @@ export const pdfNutrientAdapter: EditorAdapter = {
       await renderPage(canvasWrap, state);
     }
 
-    // Load PDF bytes
     (async () => {
       try {
         const res = await fetch(source);
@@ -151,7 +115,7 @@ export const pdfNutrientAdapter: EditorAdapter = {
         await renderPage(canvasWrap, state);
         updateInfo();
       } catch (err) {
-        pageInfo.textContent = `Load failed: ${String(err)}`;
+        pageInfo.textContent = t("pdf.loadFailed", { error: String(err) });
       }
     })();
 
@@ -162,37 +126,29 @@ export const pdfNutrientAdapter: EditorAdapter = {
       if (state.currentPage < state.totalPages - 1) { state.currentPage++; void renderCurrent(); }
     });
     ctx.bodyEl.querySelector("#pdf-zoom-in")!.addEventListener("click", () => {
-      state.zoomLevel = Math.min(state.zoomLevel + 1, 8);
-      void renderCurrent();
+      state.zoomLevel = Math.min(state.zoomLevel + 1, 8); void renderCurrent();
     });
     ctx.bodyEl.querySelector("#pdf-zoom-out")!.addEventListener("click", () => {
-      state.zoomLevel = Math.max(state.zoomLevel - 1, -2);
-      void renderCurrent();
+      state.zoomLevel = Math.max(state.zoomLevel - 1, -2); void renderCurrent();
     });
     ctx.bodyEl.querySelector("#pdf-zoom-reset")!.addEventListener("click", () => {
-      state.zoomLevel = 0;
-      void renderCurrent();
+      state.zoomLevel = 0; void renderCurrent();
     });
   },
 
-  // --- Edit mode: checkout → open in native PDF editor → auto-sync ---
   openEditor(ctx: AdapterRenderContext): void {
     const source = ctx.getPreviewUrl(ctx.item);
     if (!source) {
-      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">No PDF file URL available</div>`;
+      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">${t("pdf.noFileUrl")}</div>`;
       return;
     }
 
     ctx.bodyEl.innerHTML = `
       <div class="pdf-native-editor">
         <div class="pdf-native-status">
-          <p class="pdf-native-title">Edit with your PDF editor</p>
-          <p class="pdf-native-desc">
-            The PDF will be downloaded to your workspace and opened in your
-            default PDF editor (Adobe Acrobat, Preview, etc.). Changes are
-            automatically synced back to EasyVault when you save in the editor.
-          </p>
-          <button type="button" id="pdf-launch-native" class="pdf-launch-btn">Open in PDF Editor</button>
+          <p class="pdf-native-title">${t("pdf.editTitle")}</p>
+          <p class="pdf-native-desc">${t("pdf.editDesc")}</p>
+          <button type="button" id="pdf-launch-native" class="pdf-launch-btn">${t("pdf.openButton")}</button>
           <p id="pdf-native-info" class="pdf-native-info"></p>
         </div>
       </div>
@@ -203,65 +159,53 @@ export const pdfNutrientAdapter: EditorAdapter = {
 
     launchBtn.addEventListener("click", () => {
       launchBtn.disabled = true;
-      infoEl.textContent = "Checking out file...";
+      infoEl.textContent = t("pdf.checkingOut");
 
       (async () => {
         try {
           const { tryCheckout, downloadFile, startAutoSync } = await import("./pdf.native.bridge");
 
-          // 1. Try checkout (acquire lock + get edit session)
-          infoEl.textContent = "Checking out file...";
+          infoEl.textContent = t("pdf.checkingOut");
           const checkout = await tryCheckout(ctx.item.id);
 
-          // 2. Download the file — use checkout URL if available, otherwise the stored URL
-          infoEl.textContent = "Downloading...";
+          infoEl.textContent = t("pdf.downloading");
           const downloadUrl = checkout?.download_url || ctx.getPreviewUrl(ctx.item);
           if (!downloadUrl) throw new Error("No file URL available");
           const bytes = await downloadFile(downloadUrl);
 
-          // 3. Save to workspace
-          infoEl.textContent = "Saving to workspace...";
+          infoEl.textContent = t("pdf.savingWorkspace");
           const savedPath = await invoke<string>("save_file_to_workspace", {
-            fileId: ctx.item.id,
-            filename: ctx.item.title,
-            bytes: Array.from(bytes),
+            fileId: ctx.item.id, filename: ctx.item.title, bytes: Array.from(bytes),
           });
 
-          // 4. Open in native editor
-          infoEl.textContent = "Opening in your PDF editor...";
+          infoEl.textContent = t("pdf.openingEditor");
           await openPath(savedPath);
 
-          // 5. Start auto-sync if checkout succeeded (we have an edit session)
           if (checkout) {
             await startAutoSync({
-              fileId: ctx.item.id,
-              filename: ctx.item.title,
-              localPath: savedPath,
+              fileId: ctx.item.id, filename: ctx.item.title, localPath: savedPath,
               editSessionId: checkout.edit_session_id,
             }, ctx.setStatus);
-
-            infoEl.textContent = `Editing: ${ctx.item.title} — changes auto-sync when you save in your editor`;
-            ctx.setStatus("PDF opened in native editor — auto-sync active");
+            infoEl.textContent = t("pdf.editing", { title: ctx.item.title });
+            ctx.setStatus(t("pdf.autoSyncActive"));
           } else {
-            // Checkout failed (e.g. 403 for service-owned files) — open read-only
-            infoEl.textContent = `Opened: ${ctx.item.title} — read-only (file lock unavailable)`;
-            ctx.setStatus("PDF opened in native editor — read-only mode (checkout unavailable)");
+            infoEl.textContent = t("pdf.readOnly", { title: ctx.item.title });
+            ctx.setStatus(t("pdf.readOnlyMode"));
             launchBtn.disabled = false;
           }
         } catch (err) {
-          infoEl.textContent = `Failed: ${String(err)}`;
-          ctx.setStatus(`Open failed: ${String(err)}`);
+          infoEl.textContent = t("pdf.failedGeneric", { error: String(err) });
+          ctx.setStatus(t("pdf.openFailed", { error: String(err) }));
           launchBtn.disabled = false;
         }
       })();
     });
   },
 
-  // Save is handled by the syncEngine auto-watcher, not the adapter
   async save(_ctx: AdapterSaveContext): Promise<AdapterSaveResult> {
     return {
       ok: false,
-      message: "Changes are auto-synced from your native PDF editor. Save in your editor to sync.",
+      message: t("pdf.autoSyncMessage"),
     };
   },
 };

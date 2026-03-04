@@ -1,22 +1,25 @@
 import { useAuthStore } from "../stores/authStore";
 import { useUiStore } from "../stores/uiStore";
+import { useT } from "../i18n";
 import type { TabName } from "../services/helpers";
+import type { TKey } from "../i18n";
 
-const TABS: { name: TabName; label: string }[] = [
-  { name: "home", label: "Home" },
-  { name: "files", label: "Files" },
-  { name: "email", label: "Email" },
-  { name: "calendar", label: "Calendar" },
-  { name: "vault", label: "Vault" },
-  { name: "shared", label: "Shared" },
-  { name: "queue", label: "Dropzone" },
-  { name: "settings", label: "Settings" },
+const TABS: { name: TabName; labelKey: TKey }[] = [
+  { name: "home", labelKey: "nav.home" },
+  { name: "files", labelKey: "nav.files" },
+  { name: "email", labelKey: "nav.email" },
+  { name: "calendar", labelKey: "nav.calendar" },
+  { name: "vault", labelKey: "nav.vault" },
+  { name: "shared", labelKey: "nav.shared" },
+  { name: "queue", labelKey: "nav.dropzone" },
+  { name: "settings", labelKey: "nav.settings" },
 ];
 
 export default function Sidebar() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const logout = useAuthStore((s) => s.logout);
+  const t = useT();
 
   return (
     <aside className="shell-sidebar">
@@ -37,12 +40,12 @@ export default function Sidebar() {
             className={`nav-btn${activeTab === tab.name ? " active" : ""}`}
             onClick={() => setActiveTab(tab.name)}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </nav>
       <button type="button" className="ghost" onClick={logout}>
-        Sign out
+        {t("nav.signOut")}
       </button>
     </aside>
   );

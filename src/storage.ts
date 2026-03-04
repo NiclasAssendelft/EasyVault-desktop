@@ -95,3 +95,13 @@ export function setOnlyofficeServerUrl(url: string): void {
     localStorage.removeItem(STORAGE_KEYS.onlyofficeServerUrl);
   }
 }
+
+export function getEmailSyncCount(): number {
+  const raw = localStorage.getItem(STORAGE_KEYS.emailSyncCount);
+  const n = Number(raw);
+  return n > 0 ? n : 50;
+}
+
+export function setEmailSyncCount(count: number): void {
+  localStorage.setItem(STORAGE_KEYS.emailSyncCount, String(count));
+}

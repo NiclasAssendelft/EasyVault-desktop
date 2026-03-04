@@ -1,4 +1,5 @@
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
+import { t } from "../i18n";
 
 export const officeOnlyofficeAdapter: EditorAdapter = {
   kind: "office",
@@ -6,8 +7,8 @@ export const officeOnlyofficeAdapter: EditorAdapter = {
   openPreview(ctx: AdapterRenderContext): void {
     ctx.bodyEl.innerHTML = `
       <div class="preview-placeholder">
-        <p>Office files open in the in-app ONLYOFFICE editor.</p>
-        <p class="files-scope-label">Switch to Edit to launch editor.</p>
+        <p>${t("office.previewMsg")}</p>
+        <p class="files-scope-label">${t("office.switchToEdit")}</p>
       </div>
     `;
   },
@@ -16,10 +17,10 @@ export const officeOnlyofficeAdapter: EditorAdapter = {
     if (!enabled) {
       ctx.bodyEl.innerHTML = `
         <div class="preview-placeholder">
-          <p>ONLYOFFICE is disabled for this build.</p>
+          <p>${t("office.disabled")}</p>
         </div>
       `;
-      ctx.setStatus("ONLYOFFICE integration not enabled");
+      ctx.setStatus(t("office.notEnabled"));
       return;
     }
 
@@ -29,18 +30,18 @@ export const officeOnlyofficeAdapter: EditorAdapter = {
     const launch = () => {
       const integrations = (window as unknown as { EasyVaultEditors?: { onlyofficeLaunch?: (fileId: string) => void } }).EasyVaultEditors;
       if (!integrations?.onlyofficeLaunch) {
-        ctx.setStatus("ONLYOFFICE launch bridge missing");
+        ctx.setStatus(t("office.bridgeMissing"));
         return;
       }
       integrations.onlyofficeLaunch(ctx.item.id);
-      ctx.setStatus("Launching ONLYOFFICE...");
+      ctx.setStatus(t("office.launching"));
     };
     launch();
   },
   async save(_ctx: AdapterSaveContext): Promise<AdapterSaveResult> {
     return {
       ok: false,
-      message: "Use in-editor save in ONLYOFFICE",
+      message: t("office.saveMessage"),
     };
   },
 };

@@ -30,6 +30,7 @@ export const STORAGE_KEYS = {
   onlyofficeJwtSecret: "easyvault_onlyoffice_jwt_secret",
   onlyofficeServerUrl: "easyvault_onlyoffice_server_url",
   locale: "easyvault_locale",
+  emailSyncCount: "easyvault_email_sync_count",
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";

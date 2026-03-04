@@ -6,11 +6,13 @@ import { safeEntityUpdate } from "../../services/entityService";
 import { syncRemoteDelta } from "../../services/deltaSyncService";
 import { asString, asArray } from "../../services/helpers";
 import { useSyncStore } from "../../stores/syncStore";
+import { useT } from "../../i18n";
 
 export default function ManageModal() {
   const target = useUiStore((s) => s.manageTarget);
   const baselineUpdatedAt = useUiStore((s) => s.manageTargetBaselineUpdatedAt);
   const close = useUiStore((s) => s.closeManageModal);
+  const t = useT();
 
   const [nameVal, setNameVal] = useState("");
   const [notesVal, setNotesVal] = useState("");
@@ -18,38 +20,25 @@ export default function ManageModal() {
   const [feedback, setFeedback] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Pre-populate fields when target changes
   useEffect(() => {
     if (!target) return;
-
     if (target.entity === "Folder") {
       const folder = useFilesStore.getState().folders.find((f) => f.id === target.id);
-      setNameVal(folder?.name || "");
-      setNotesVal("");
-      setTagsVal("");
+      setNameVal(folder?.name || ""); setNotesVal(""); setTagsVal("");
     } else if (target.entity === "VaultItem") {
       const item = useFilesStore.getState().items.find((i) => i.id === target.id);
-      setNameVal(item?.title || "");
-      setNotesVal(item?.notes || "");
-      setTagsVal((item?.tags || []).join(", "));
+      setNameVal(item?.title || ""); setNotesVal(item?.notes || ""); setTagsVal((item?.tags || []).join(", "));
     } else if (target.entity === "EmailItem") {
       const row = useRemoteDataStore.getState().emails.find((e) => asString(e.id) === target.id);
-      setNameVal(row ? asString(row.subject) : "");
-      setNotesVal(row ? asString(row.snippet) : "");
-      setTagsVal(row ? asArray(row.tags).join(", ") : "");
+      setNameVal(row ? asString(row.subject) : ""); setNotesVal(row ? asString(row.snippet) : ""); setTagsVal(row ? asArray(row.tags).join(", ") : "");
     } else if (target.entity === "CalendarEvent") {
       const row = useRemoteDataStore.getState().events.find((e) => asString(e.id) === target.id);
-      setNameVal(row ? asString(row.title) : "");
-      setNotesVal(row ? asString(row.description) : "");
-      setTagsVal(row ? asArray(row.tags).join(", ") : "");
+      setNameVal(row ? asString(row.title) : ""); setNotesVal(row ? asString(row.description) : ""); setTagsVal(row ? asArray(row.tags).join(", ") : "");
     } else if (target.entity === "Space") {
       const row = useRemoteDataStore.getState().spaces.find((s) => asString(s.id) === target.id);
-      setNameVal(row ? asString(row.name) : "");
-      setNotesVal(row ? asString(row.description) : "");
-      setTagsVal("");
+      setNameVal(row ? asString(row.name) : ""); setNotesVal(row ? asString(row.description) : ""); setTagsVal("");
     }
-    setFeedback("");
-    setSaving(false);
+    setFeedback(""); setSaving(false);
   }, [target]);
 
   if (!target) return null;
@@ -59,46 +48,48 @@ export default function ManageModal() {
   const showTags = entityType !== "Folder" && entityType !== "Space";
 
   function getNameLabel(): string {
-    if (entityType === "EmailItem") return "Subject";
-    if (entityType === "CalendarEvent") return "Title";
-    if (entityType === "Space") return "Space Name";
-    return "Name";
+    if (entityType === "EmailItem") return t("manage.subject");
+    if (entityType === "CalendarEvent") return t("manage.eventTitle");
+    if (entityType === "Space") return t("manage.spaceName");
+    return t("manage.name");
   }
 
   function getNotesLabel(): string {
-    if (entityType === "EmailItem") return "Snippet";
-    if (entityType === "CalendarEvent") return "Description";
-    if (entityType === "Space") return "Description";
-    return "Notes";
+    if (entityType === "EmailItem") return t("manage.snippet");
+    if (entityType === "CalendarEvent" || entityType === "Space") return t("manage.description");
+    return t("manage.notes");
+  }
+
+  function getModalTitle(): string {
+    if (entityType === "CalendarEvent") return t("manage.titleEvent");
+    if (entityType === "EmailItem") return t("manage.titleEmail");
+    if (entityType === "Space") return t("manage.titleSpace");
+    if (entityType === "Folder") return t("manage.titleFolder");
+    if (entityType === "GatherPack") return t("manage.titleGatherPack");
+    return t("manage.titleVaultItem");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmedName = nameVal.trim();
-    if (!trimmedName) {
-      setFeedback("Name is required.");
-      return;
-    }
-
-    setSaving(true);
-    setFeedback("");
+    if (!trimmedName) { setFeedback(t("manage.nameRequired")); return; }
+    setSaving(true); setFeedback("");
 
     try {
       const currentTarget = target;
       if (!currentTarget) return;
 
       let payload: Record<string, unknown> = {};
-
       if (entityType === "Folder") {
         payload = { name: trimmedName };
       } else if (entityType === "VaultItem") {
-        const tags = tagsVal.split(",").map((t) => t.trim()).filter(Boolean);
+        const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
         payload = { title: trimmedName, notes: notesVal, tags };
       } else if (entityType === "EmailItem") {
-        const tags = tagsVal.split(",").map((t) => t.trim()).filter(Boolean);
+        const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
         payload = { subject: trimmedName, snippet: notesVal, tags };
       } else if (entityType === "CalendarEvent") {
-        const tags = tagsVal.split(",").map((t) => t.trim()).filter(Boolean);
+        const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
         payload = { title: trimmedName, description: notesVal, tags };
       } else if (entityType === "Space") {
         payload = { name: trimmedName, description: notesVal };
@@ -106,7 +97,6 @@ export default function ManageModal() {
 
       const result = await safeEntityUpdate(entityType, currentTarget.id, payload, baselineUpdatedAt);
 
-      // Update local stores
       if (entityType === "Folder") {
         useFilesStore.getState().updateFolder(currentTarget.id, { name: trimmedName });
         useFilesStore.getState().persist();
@@ -115,7 +105,7 @@ export default function ManageModal() {
           if (updatedAt) useSyncStore.getState().setEntityUpdatedAt("Folder", currentTarget.id, updatedAt);
         }
       } else if (entityType === "VaultItem") {
-        const tags = tagsVal.split(",").map((t) => t.trim()).filter(Boolean);
+        const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
         useFilesStore.getState().updateItem(currentTarget.id, { title: trimmedName, notes: notesVal, tags });
         useFilesStore.getState().persist();
         if (result) {
@@ -123,14 +113,12 @@ export default function ManageModal() {
           if (updatedAt) useSyncStore.getState().setEntityUpdatedAt("VaultItem", currentTarget.id, updatedAt);
         }
       } else {
-        // For EmailItem, CalendarEvent, Space: sync remote delta to refresh
         await syncRemoteDelta();
       }
 
       close();
     } catch (err) {
-      setFeedback(`Error: ${String(err)}`);
-      setSaving(false);
+      setFeedback(t("manage.error", { error: String(err) })); setSaving(false);
     }
   }
 
@@ -139,46 +127,28 @@ export default function ManageModal() {
       <div className="modal-backdrop" onClick={close} />
       <div className="modal-panel">
         <div className="modal-head">
-          <h3>Manage {entityType === "CalendarEvent" ? "Event" : entityType === "EmailItem" ? "Email" : entityType}</h3>
+          <h3>{getModalTitle()}</h3>
           <button type="button" className="ghost" onClick={close}>&#x2715;</button>
         </div>
         <form className="form" onSubmit={handleSubmit}>
           <label>{getNameLabel()}</label>
-          <input
-            type="text"
-            placeholder={`Enter ${getNameLabel().toLowerCase()}...`}
-            value={nameVal}
-            onChange={(e) => setNameVal(e.target.value)}
-            autoFocus
-          />
+          <input type="text" placeholder={t("manage.enterPlaceholder", { label: getNameLabel().toLowerCase() })} value={nameVal} onChange={(e) => setNameVal(e.target.value)} autoFocus />
           {showNotes && (
             <>
               <label>{getNotesLabel()}</label>
-              <input
-                type="text"
-                placeholder={`Optional ${getNotesLabel().toLowerCase()}...`}
-                value={notesVal}
-                onChange={(e) => setNotesVal(e.target.value)}
-              />
+              <input type="text" placeholder={t("manage.optionalPlaceholder", { label: getNotesLabel().toLowerCase() })} value={notesVal} onChange={(e) => setNotesVal(e.target.value)} />
             </>
           )}
           {showTags && (
             <>
-              <label>Tags (comma separated)</label>
-              <input
-                type="text"
-                placeholder="tag1, tag2"
-                value={tagsVal}
-                onChange={(e) => setTagsVal(e.target.value)}
-              />
+              <label>{t("manage.tagsLabel")}</label>
+              <input type="text" placeholder={t("manage.tagsPlaceholder")} value={tagsVal} onChange={(e) => setTagsVal(e.target.value)} />
             </>
           )}
           {feedback && <p className="feedback-text">{feedback}</p>}
           <div className="actions-row">
-            <button type="button" className="ghost" onClick={close}>Cancel</button>
-            <button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
+            <button type="button" className="ghost" onClick={close}>{t("manage.cancel")}</button>
+            <button type="submit" disabled={saving}>{saving ? t("manage.saving") : t("manage.saveChanges")}</button>
           </div>
         </form>
       </div>

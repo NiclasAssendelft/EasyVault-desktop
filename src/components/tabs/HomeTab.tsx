@@ -5,6 +5,7 @@ import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useQueueStore } from "../../stores/queueStore";
 import { asString } from "../../services/helpers";
 import { getWatchEnabled, getWatchFolder } from "../../storage";
+import { useT } from "../../i18n";
 
 export default function HomeTab() {
   const items = useFilesStore((s) => s.items);
@@ -12,6 +13,7 @@ export default function HomeTab() {
   const lastSync = useUiStore((s) => s.lastSync);
   const events = useRemoteDataStore((s) => s.events);
   const queueItems = useQueueStore((s) => s.items);
+  const t = useT();
 
   const pinnedCount = useMemo(
     () => items.filter((i) => i.isPinned).length,
@@ -39,45 +41,45 @@ export default function HomeTab() {
   return (
     <section className="tab-panel">
       <div className="home-hero">
-        <h1>Good afternoon</h1>
-        <p>Here is what needs your attention today</p>
+        <h1>{t("home.greeting")}</h1>
+        <p>{t("home.subtitle")}</p>
       </div>
       <div className="dashboard-grid">
         <article className="dash-card">
           <div className="dash-head">
-            <h4>Pinned</h4>
-            <span>Desktop</span>
+            <h4>{t("home.pinned")}</h4>
+            <span>{t("home.desktop")}</span>
           </div>
-          <p>{pinnedCount} pinned item{pinnedCount !== 1 ? "s" : ""}</p>
-          <p>Current file: {currentFile}</p>
+          <p>{t("home.pinnedItems", { count: pinnedCount })}</p>
+          <p>{t("home.currentFile", { name: currentFile })}</p>
         </article>
 
         <article className="dash-card">
           <div className="dash-head">
-            <h4>Upcoming meetings</h4>
-            <span>Next 24h</span>
+            <h4>{t("home.upcomingMeetings")}</h4>
+            <span>{t("home.next24h")}</span>
           </div>
-          <p>{upcomingCount} upcoming event{upcomingCount !== 1 ? "s" : ""}</p>
-          <p>Last sync: {lastSync}</p>
+          <p>{t("home.upcomingEvents", { count: upcomingCount })}</p>
+          <p>{t("home.lastSync", { time: lastSync })}</p>
         </article>
 
         <article className="dash-card">
           <div className="dash-head">
-            <h4>Import queue</h4>
-            <span>Queue</span>
+            <h4>{t("home.importQueue")}</h4>
+            <span>{t("home.queue")}</span>
           </div>
           <p>
-            Total: {queueTotal} | Active: {queueActive} | Failed: {queueFailed}{" "}
-            | Done: {queueDone}
+            {t("home.total", { total: queueTotal })} | {t("home.active", { active: queueActive })} | {t("home.failed", { failed: queueFailed })}{" "}
+            | {t("home.done", { done: queueDone })}
           </p>
         </article>
 
         <article className="dash-card">
           <div className="dash-head">
-            <h4>Import watcher</h4>
-            <span>Dropzone</span>
+            <h4>{t("home.importWatcher")}</h4>
+            <span>{t("home.dropzone")}</span>
           </div>
-          <p>Watch folder: {watchEnabled ? "enabled" : "disabled"}</p>
+          <p>{watchEnabled ? t("home.watchEnabled") : t("home.watchDisabled")}</p>
           {watchFolder && <p>{watchFolder}</p>}
         </article>
       </div>

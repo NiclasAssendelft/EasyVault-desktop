@@ -2,6 +2,7 @@ import type { DesktopItem } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
 import { useUiStore } from "../../stores/uiStore";
 import { useFilesStore } from "../../stores/filesStore";
+import { useT } from "../../i18n";
 
 interface Props {
   item: DesktopItem;
@@ -21,6 +22,7 @@ export default function ItemRow({ item }: Props) {
   const folders = useFilesStore((s) => s.folders);
   const folder = folders.find((f) => f.id === item.folderId);
   const icon = TYPE_ICONS[item.itemType] || "📄";
+  const t = useT();
 
   return (
     <article className="file-row group" onClick={() => setFileActionTargetId(item.id)}>
@@ -33,8 +35,8 @@ export default function ItemRow({ item }: Props) {
         <p className="file-row-sub">
           {item.itemType}
           {folder ? ` • ${folder.name}` : ""}
-          {item.createdAtIso ? ` • ${formatRelativeTime(item.createdAtIso)}` : ""}
-          {item.isPinned ? " • pinned" : ""}
+          {(item.openedAt || item.createdAtIso) ? ` • ${formatRelativeTime(item.openedAt || item.createdAtIso)}` : ""}
+          {item.isPinned ? ` • ${t("list.pinned")}` : ""}
           {item.isFavorite ? " • ★" : ""}
         </p>
       </div>

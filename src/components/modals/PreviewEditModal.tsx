@@ -6,21 +6,10 @@ import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { syncRemoteDelta } from "../../services/deltaSyncService";
 import {
-  fileKindFromItem,
-  asString,
-  toAdapterItem,
-  getPreviewUrlForItem,
-  formatRelativeTime,
-  type PreviewKind,
+  fileKindFromItem, asString, toAdapterItem, getPreviewUrlForItem, formatRelativeTime, type PreviewKind,
 } from "../../services/helpers";
 import {
-  callDesktopSave,
-  downloadFile,
-  uploadFileWithToken,
-  checkoutFile,
-  listVersions,
-  createNewVersion,
-  sha256Hex,
+  callDesktopSave, downloadFile, uploadFileWithToken, checkoutFile, listVersions, createNewVersion, sha256Hex,
 } from "../../api";
 import { getAuthToken, getPreferredUploadToken } from "../../storage";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -29,6 +18,7 @@ import { pdfNutrientAdapter } from "../../editors/pdf.nutrient.adapter";
 import { imagePinturaAdapter } from "../../editors/image.pintura.adapter";
 import { officeOnlyofficeAdapter } from "../../editors/office.onlyoffice.adapter";
 import type { EditorAdapter, AdapterRenderContext, AdapterSaveContext } from "../../editors/types";
+import { useT, t } from "../../i18n";
 
 function adapterForKind(kind: PreviewKind): EditorAdapter | null {
   if (kind === "pdf") return pdfNutrientAdapter;
@@ -53,6 +43,7 @@ export default function PreviewEditModal() {
   const setNoteDraft = usePreviewEditStore((s) => s.setNoteDraft);
   const setLinkUrlDraft = usePreviewEditStore((s) => s.setLinkUrlDraft);
   const setLinkNotesDraft = usePreviewEditStore((s) => s.setLinkNotesDraft);
+  const tr = useT();
 
   const [statusText, setStatusText] = useState("");
   const [persistedError, setPersistedError] = useState("");
@@ -60,59 +51,29 @@ export default function PreviewEditModal() {
   const adapterRenderedRef = useRef(false);
 
   const item = useFilesStore((s) => s.items.find((i) => i.id === targetId));
-  // Use a ref so delta sync item updates don't restart the adapter/editor
   const itemRef = useRef(item);
   if (item) itemRef.current = item;
 
-  // Render adapter-based editors — depends only on targetId/kind/mode, not item,
-  // so delta sync updates don't destroy and recreate the running editor.
   useEffect(() => {
     if (!targetId || !itemRef.current || !bodyRef.current) return;
     const adapter = adapterForKind(kind);
     if (!adapter) return;
-
     adapterRenderedRef.current = true;
     const adapterItem = toAdapterItem(itemRef.current);
     const ctx: AdapterRenderContext = {
-      item: adapterItem,
-      bodyEl: bodyRef.current,
-      draft: {},
-      setStatus: setStatusText,
-      getPreviewUrl: getPreviewUrlForItem,
-      featureFlags: {
-        nutrient: true,
-        onlyoffice: true,
-        pintura: true,
-      },
+      item: adapterItem, bodyEl: bodyRef.current, draft: {}, setStatus: setStatusText,
+      getPreviewUrl: getPreviewUrlForItem, featureFlags: { nutrient: true, onlyoffice: true, pintura: true },
     };
-
-    if (mode === "preview") {
-      adapter.openPreview(ctx);
-    } else {
-      adapter.openEditor(ctx);
-    }
-
-    return () => {
-      if (bodyRef.current) {
-        bodyRef.current.innerHTML = "";
-      }
-      adapterRenderedRef.current = false;
-    };
+    if (mode === "preview") adapter.openPreview(ctx); else adapter.openEditor(ctx);
+    return () => { if (bodyRef.current) bodyRef.current.innerHTML = ""; adapterRenderedRef.current = false; };
   }, [targetId, kind, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist errors from globalStatus so they don't get overwritten by delta sync
   useEffect(() => {
     const lower = globalStatus.toLowerCase();
-    if (lower.includes("failed") || lower.includes("error") || lower.includes("timeout")) {
-      setPersistedError(globalStatus);
-    }
+    if (lower.includes("failed") || lower.includes("error") || lower.includes("timeout")) setPersistedError(globalStatus);
   }, [globalStatus]);
 
-  const handleClose = useCallback(() => {
-    closeStore();
-    setStatusText("");
-    setPersistedError("");
-  }, [closeStore]);
+  const handleClose = useCallback(() => { closeStore(); setStatusText(""); setPersistedError(""); }, [closeStore]);
 
   if (!targetId) return null;
   if (!item) return null;
@@ -124,221 +85,116 @@ export default function PreviewEditModal() {
 
   async function handleOpenNative() {
     const previewUrl = getPreviewUrlForItem(item!);
-    if (!previewUrl) {
-      setStatusText("No file URL available.");
-      return;
-    }
+    if (!previewUrl) { setStatusText(t("previewEdit.noFileUrl")); return; }
     try {
-      setStatusText("Downloading...");
+      setStatusText(t("fileAction.downloading"));
       const bytes = await downloadFile(previewUrl);
-      const savedPath = await invoke<string>("save_file_to_workspace", {
-        fileId: item!.id,
-        filename: item!.title,
-        bytes: Array.from(bytes),
-      });
-      setStatusText("Opening...");
+      const savedPath = await invoke<string>("save_file_to_workspace", { fileId: item!.id, filename: item!.title, bytes: Array.from(bytes) });
+      setStatusText(t("fileAction.opening"));
       await openPath(savedPath);
       setStatusText("");
     } catch (err) {
-      setStatusText(`Open failed: ${String(err)}`);
+      setStatusText(t("previewEdit.openFailed", { error: String(err) }));
     }
   }
 
-  function handleToggleMode() {
-    if (mode === "preview") {
-      setMode("edit");
-    } else {
-      setMode("preview");
-    }
-  }
+  function handleToggleMode() { setMode(mode === "preview" ? "edit" : "preview"); }
 
   async function handleRefresh() {
-    setStatusText("Refreshing...");
-    try {
-      await syncRemoteDelta();
-      setStatusText("Refreshed.");
-    } catch (err) {
-      setStatusText(`Refresh failed: ${String(err)}`);
-    }
+    setStatusText(t("previewEdit.refreshing"));
+    try { await syncRemoteDelta(); setStatusText(t("previewEdit.refreshed")); }
+    catch (err) { setStatusText(t("previewEdit.refreshFailed", { error: String(err) })); }
   }
 
   async function handleSave() {
     if (!item) return;
     setSaving(true);
-    setStatusText("Saving...");
+    setStatusText(t("previewEdit.savingStatus"));
 
     try {
       if (adapter) {
-        // Adapter-based save (PDF, image, office)
         const adapterItem = toAdapterItem(item);
         const authToken = getAuthToken() || "";
         const uploadToken = getPreferredUploadToken() || authToken;
         const ctx: AdapterSaveContext = {
-          item: adapterItem,
-          draft: {},
-          setStatus: setStatusText,
-          getAuthToken: () => authToken,
-          getUploadToken: () => uploadToken,
+          item: adapterItem, draft: {}, setStatus: setStatusText,
+          getAuthToken: () => authToken, getUploadToken: () => uploadToken,
           checkoutFile: async (fileId, requestToken) => {
             const result = await checkoutFile(fileId, requestToken);
             return { download_url: result.download_url, edit_session_id: result.edit_session_id };
           },
-          downloadFile,
-          uploadFileWithToken,
-          createNewVersion,
-          listVersions,
-          sha256Hex,
+          downloadFile, uploadFileWithToken, createNewVersion, listVersions, sha256Hex,
         };
         const result = await adapter.save(ctx);
         if (result.ok) {
-          setStatusText(result.message || "Saved.");
-          if (result.updatedAtIso) {
-            useFilesStore.getState().updateItem(item.id, { updatedAtIso: result.updatedAtIso });
-            useFilesStore.getState().persist();
-          }
+          setStatusText(result.message || t("previewEdit.saved"));
+          if (result.updatedAtIso) { useFilesStore.getState().updateItem(item.id, { updatedAtIso: result.updatedAtIso }); useFilesStore.getState().persist(); }
         } else {
-          setStatusText(result.message || "Save failed.");
+          setStatusText(result.message || t("previewEdit.saveFailed"));
         }
       } else if (realKind === "note") {
-        // Save note content
         const baselineUpdatedAt = useSyncStore.getState().getEntityUpdatedAt("VaultItem", item.id);
-        const payload: Record<string, unknown> = {
-          content_text: noteDraft,
-          notes: noteDraft,
-        };
-
+        const payload: Record<string, unknown> = { content_text: noteDraft, notes: noteDraft };
         if (baselineUpdatedAt) {
-          const result = await callDesktopSave<Record<string, unknown>>(
-            "VaultItem",
-            item.id,
-            payload,
-            baselineUpdatedAt
-          );
-          if (!result.ok) {
-            setStatusText(`Conflict: record changed on server at ${result.serverUpdatedDate || "(unknown)"}`);
-            setSaving(false);
-            return;
-          }
+          const result = await callDesktopSave<Record<string, unknown>>("VaultItem", item.id, payload, baselineUpdatedAt);
+          if (!result.ok) { setStatusText(t("previewEdit.conflict", { date: result.serverUpdatedDate || "(unknown)" })); setSaving(false); return; }
           const nextUpdatedAt = asString(result.record.updated_date, asString(result.record.created_date));
-          if (nextUpdatedAt) {
-            useSyncStore.getState().setEntityUpdatedAt("VaultItem", item.id, nextUpdatedAt);
-          }
-          useFilesStore.getState().updateItem(item.id, {
-            contentText: noteDraft,
-            notes: noteDraft,
-            updatedAtIso: nextUpdatedAt || new Date().toISOString(),
-          });
+          if (nextUpdatedAt) useSyncStore.getState().setEntityUpdatedAt("VaultItem", item.id, nextUpdatedAt);
+          useFilesStore.getState().updateItem(item.id, { contentText: noteDraft, notes: noteDraft, updatedAtIso: nextUpdatedAt || new Date().toISOString() });
         } else {
           await safeEntityUpdate("VaultItem", item.id, payload);
-          useFilesStore.getState().updateItem(item.id, {
-            contentText: noteDraft,
-            notes: noteDraft,
-            updatedAtIso: new Date().toISOString(),
-          });
+          useFilesStore.getState().updateItem(item.id, { contentText: noteDraft, notes: noteDraft, updatedAtIso: new Date().toISOString() });
         }
-
         useFilesStore.getState().persist();
-        setStatusText("Saved.");
+        setStatusText(t("previewEdit.saved"));
       } else if (realKind === "link") {
-        // Save link changes
         const baselineUpdatedAt = useSyncStore.getState().getEntityUpdatedAt("VaultItem", item.id);
-        const payload: Record<string, unknown> = {
-          source_url: linkUrlDraft,
-          notes: linkNotesDraft,
-        };
-
+        const payload: Record<string, unknown> = { source_url: linkUrlDraft, notes: linkNotesDraft };
         if (baselineUpdatedAt) {
-          const result = await callDesktopSave<Record<string, unknown>>(
-            "VaultItem",
-            item.id,
-            payload,
-            baselineUpdatedAt
-          );
-          if (!result.ok) {
-            setStatusText(`Conflict: record changed on server at ${result.serverUpdatedDate || "(unknown)"}`);
-            setSaving(false);
-            return;
-          }
+          const result = await callDesktopSave<Record<string, unknown>>("VaultItem", item.id, payload, baselineUpdatedAt);
+          if (!result.ok) { setStatusText(t("previewEdit.conflict", { date: result.serverUpdatedDate || "(unknown)" })); setSaving(false); return; }
           const nextUpdatedAt = asString(result.record.updated_date, asString(result.record.created_date));
-          if (nextUpdatedAt) {
-            useSyncStore.getState().setEntityUpdatedAt("VaultItem", item.id, nextUpdatedAt);
-          }
-          useFilesStore.getState().updateItem(item.id, {
-            sourceUrl: linkUrlDraft,
-            notes: linkNotesDraft,
-            updatedAtIso: nextUpdatedAt || new Date().toISOString(),
-          });
+          if (nextUpdatedAt) useSyncStore.getState().setEntityUpdatedAt("VaultItem", item.id, nextUpdatedAt);
+          useFilesStore.getState().updateItem(item.id, { sourceUrl: linkUrlDraft, notes: linkNotesDraft, updatedAtIso: nextUpdatedAt || new Date().toISOString() });
         } else {
           await safeEntityUpdate("VaultItem", item.id, payload);
-          useFilesStore.getState().updateItem(item.id, {
-            sourceUrl: linkUrlDraft,
-            notes: linkNotesDraft,
-            updatedAtIso: new Date().toISOString(),
-          });
+          useFilesStore.getState().updateItem(item.id, { sourceUrl: linkUrlDraft, notes: linkNotesDraft, updatedAtIso: new Date().toISOString() });
         }
-
         useFilesStore.getState().persist();
-        setStatusText("Saved.");
+        setStatusText(t("previewEdit.saved"));
       }
     } catch (err) {
-      setStatusText(`Save error: ${String(err)}`);
+      setStatusText(t("previewEdit.saveError", { error: String(err) }));
     } finally {
       setSaving(false);
     }
   }
 
-  // Render body content for note/link kinds
   function renderBody() {
     if (realKind === "note") {
       if (mode === "preview") {
-        return (
-          <div className="preview-edit-body">
-            <pre className="note-preview">{item!.contentText || item!.notes || "(empty note)"}</pre>
-          </div>
-        );
+        return <div className="preview-edit-body"><pre className="note-preview">{item!.contentText || item!.notes || tr("previewEdit.emptyNote")}</pre></div>;
       }
-      return (
-        <div className="preview-edit-body">
-          <textarea
-            className="note-editor"
-            value={noteDraft}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            placeholder="Write your note here..."
-          />
-        </div>
-      );
+      return <div className="preview-edit-body"><textarea className="note-editor" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder={tr("previewEdit.notePlaceholder")} /></div>;
     }
-
     if (realKind === "link") {
       if (mode === "preview") {
         return (
           <div className="preview-edit-body">
-            <p><strong>URL:</strong> {item!.sourceUrl || "(no URL)"}</p>
-            <p><strong>Notes:</strong> {item!.notes || "(no notes)"}</p>
+            <p><strong>{tr("previewEdit.urlLabel")}:</strong> {item!.sourceUrl || tr("previewEdit.urlFallback")}</p>
+            <p><strong>{tr("previewEdit.notesLabel")}:</strong> {item!.notes || tr("previewEdit.notesFallback")}</p>
           </div>
         );
       }
       return (
         <div className="preview-edit-body">
-          <label>URL</label>
-          <input
-            type="text"
-            value={linkUrlDraft}
-            onChange={(e) => setLinkUrlDraft(e.target.value)}
-            placeholder="https://..."
-          />
-          <label>Notes</label>
-          <textarea
-            className="note-editor"
-            value={linkNotesDraft}
-            onChange={(e) => setLinkNotesDraft(e.target.value)}
-            placeholder="Optional notes..."
-          />
+          <label>{tr("previewEdit.urlLabel")}</label>
+          <input type="text" value={linkUrlDraft} onChange={(e) => setLinkUrlDraft(e.target.value)} placeholder={tr("previewEdit.urlPlaceholder")} />
+          <label>{tr("previewEdit.notesLabel")}</label>
+          <textarea className="note-editor" value={linkNotesDraft} onChange={(e) => setLinkNotesDraft(e.target.value)} placeholder={tr("previewEdit.optionalNotes")} />
         </div>
       );
     }
-
-    // For PDF, image, office, other: the adapter renders into bodyRef via useEffect
     return <div className={`preview-edit-body${realKind === "office" ? " office-body" : ""}`} ref={bodyRef} />;
   }
 
@@ -348,8 +204,8 @@ export default function PreviewEditModal() {
       <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}${realKind === "pdf" ? " pdf-mode" : ""}`}>
         <div className="modal-head">
           <div className="preview-edit-title-wrap">
-            <h3>{mode === "preview" ? "Preview" : "Edit"}: {item.title}</h3>
-            <p className="files-scope-label">{relativeTime ? `Updated ${relativeTime}` : ""}</p>
+            <h3>{mode === "preview" ? tr("previewEdit.preview") : tr("previewEdit.edit")}: {item.title}</h3>
+            <p className="files-scope-label">{relativeTime ? tr("previewEdit.updated", { time: relativeTime }) : ""}</p>
           </div>
           <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
         </div>
@@ -358,7 +214,7 @@ export default function PreviewEditModal() {
           <p
             className={`preview-edit-live-status files-scope-label${persistedError ? " status-error" : ""}`}
             onClick={persistedError ? () => setPersistedError("") : undefined}
-            title={persistedError ? "Click to dismiss" : undefined}
+            title={persistedError ? tr("previewEdit.clickDismiss") : undefined}
             style={persistedError ? { cursor: "pointer" } : undefined}
           >
             {persistedError || globalStatus || statusText}
@@ -368,22 +224,13 @@ export default function PreviewEditModal() {
         {renderBody()}
 
         <div className="actions-row preview-edit-actions">
-          <button type="button" className="ghost" onClick={handleOpenNative}>Open Native</button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={handleToggleMode}
-            disabled={!canEdit && mode === "preview"}
-          >
-            {mode === "preview" ? "Switch to Edit" : "Switch to Preview"}
+          <button type="button" className="ghost" onClick={handleOpenNative}>{tr("previewEdit.openNative")}</button>
+          <button type="button" className="ghost" onClick={handleToggleMode} disabled={!canEdit && mode === "preview"}>
+            {mode === "preview" ? tr("previewEdit.switchToEdit") : tr("previewEdit.switchToPreview")}
           </button>
-          <button type="button" className="ghost" onClick={handleRefresh}>Refresh</button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={savingGlobal || mode === "preview"}
-          >
-            {savingGlobal ? "Saving..." : "Save"}
+          <button type="button" className="ghost" onClick={handleRefresh}>{tr("previewEdit.refresh")}</button>
+          <button type="button" onClick={handleSave} disabled={savingGlobal || mode === "preview"}>
+            {savingGlobal ? tr("previewEdit.saving") : tr("previewEdit.save")}
           </button>
         </div>
       </div>

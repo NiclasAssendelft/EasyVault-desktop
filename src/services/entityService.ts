@@ -70,7 +70,7 @@ export async function safeEntityUpdate(
   }
 }
 
-export async function deleteRemoteEntity(entity: "Folder" | "VaultItem" | "EmailItem" | "CalendarEvent" | "Space", id: string): Promise<void> {
+export async function deleteRemoteEntity(entity: "Folder" | "VaultItem" | "EmailItem" | "CalendarEvent" | "Space" | "GatherPack", id: string): Promise<void> {
   let desktopDeleteErr: unknown = null;
   try {
     await invokeBase44Function("desktopDelete", { entity_name: entity, id });

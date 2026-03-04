@@ -1,4 +1,5 @@
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
+import { t } from "../i18n";
 
 function num(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -10,7 +11,7 @@ export const imagePinturaAdapter: EditorAdapter = {
   openPreview(ctx: AdapterRenderContext): void {
     const src = ctx.getPreviewUrl(ctx.item);
     if (!src) {
-      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">No image preview available</div>`;
+      ctx.bodyEl.innerHTML = `<div class="preview-placeholder">${t("image.noPreview")}</div>`;
       return;
     }
     ctx.bodyEl.innerHTML = `<img class="preview-image" src="${src}" alt="${ctx.item.title}" />`;
@@ -22,11 +23,11 @@ export const imagePinturaAdapter: EditorAdapter = {
     ctx.bodyEl.innerHTML = `
       <div class="preview-image-editor">
         <div class="preview-image-controls">
-          <label>Rotate</label>
+          <label>${t("image.rotate")}</label>
           <input id="preview-edit-image-rotate" type="range" min="0" max="270" step="90" value="${rotation}" />
-          <label>Brightness</label>
+          <label>${t("image.brightness")}</label>
           <input id="preview-edit-image-brightness" type="range" min="50" max="150" step="1" value="${brightness}" />
-          <p class="files-scope-label">Pintura adapter path is wired. Using fallback controls until Pintura runtime is injected.</p>
+          <p class="files-scope-label">${t("image.fallbackNote")}</p>
         </div>
         <div class="preview-image-canvas-wrap">
           <img id="preview-edit-image-preview" class="preview-image editable" src="${src}" alt="${ctx.item.title}" />
@@ -61,11 +62,11 @@ export const imagePinturaAdapter: EditorAdapter = {
   },
   async save(ctx: AdapterSaveContext): Promise<AdapterSaveResult> {
     if (!ctx.item.storedFileUrl) {
-      return { ok: false, message: "missing image file URL" };
+      return { ok: false, message: t("image.missingUrl") };
     }
     const uploadToken = ctx.getUploadToken();
     if (!uploadToken) {
-      return { ok: false, message: "missing upload token" };
+      return { ok: false, message: t("image.missingToken") };
     }
 
     const checkout = await ctx.checkoutFile(ctx.item.id, uploadToken);
@@ -81,7 +82,7 @@ export const imagePinturaAdapter: EditorAdapter = {
     const canvas = document.createElement("canvas");
     const drawing = canvas.getContext("2d");
     if (!drawing) {
-      return { ok: false, message: "canvas context unavailable" };
+      return { ok: false, message: t("image.canvasError") };
     }
 
     canvas.width = rotated ? bitmap.height : bitmap.width;
@@ -93,7 +94,7 @@ export const imagePinturaAdapter: EditorAdapter = {
 
     const outputBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
     if (!outputBlob) {
-      return { ok: false, message: "failed to export edited image" };
+      return { ok: false, message: t("image.exportFailed") };
     }
 
     const outBytes = new Uint8Array(await outputBlob.arrayBuffer());
@@ -123,6 +124,6 @@ export const imagePinturaAdapter: EditorAdapter = {
     const latest = versions[0] as Record<string, unknown> | undefined;
     const updatedAtIso = typeof latest?.created_date === "string" ? latest.created_date : new Date().toISOString();
 
-    return { ok: true, message: "image edited and version saved", updatedAtIso };
+    return { ok: true, message: t("image.saved"), updatedAtIso };
   },
 };

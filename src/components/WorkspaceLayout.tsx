@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useUiStore } from "../stores/uiStore";
 import {
   refreshFilesFromRemote,
@@ -12,6 +12,7 @@ import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/o
 import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
 import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
+import { useT, useLocaleStore, type Locale } from "../i18n";
 import Sidebar from "./Sidebar";
 import HomeTab from "./tabs/HomeTab";
 import FilesTab from "./tabs/FilesTab";
@@ -47,11 +48,61 @@ const TAB_REFRESH: Partial<Record<keyof typeof TAB_COMPONENTS, () => Promise<voi
   queue: refreshDropzoneFromRemote,
 };
 
+const LOCALES: { code: Locale; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "sv", label: "Svenska" },
+  { code: "fi", label: "Suomi" },
+];
+
+function LocaleDropdown({ locale, setLocale }: { locale: Locale; setLocale: (l: Locale) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="locale-dropdown" ref={ref}>
+      <button type="button" className="locale-toggle" onClick={() => setOpen(!open)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <ellipse cx="12" cy="12" rx="4" ry="10" />
+          <path d="M2 12h20" />
+        </svg>
+        <span className="locale-label">{locale.toUpperCase()}</span>
+      </button>
+      {open && (
+        <div className="locale-menu">
+          {LOCALES.map((l) => (
+            <button
+              key={l.code}
+              className={`locale-menu-item${l.code === locale ? " active" : ""}`}
+              onClick={() => { setLocale(l.code); setOpen(false); }}
+            >
+              <span>{l.label}</span>
+              <span className="locale-menu-code">{l.code.toUpperCase()}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WorkspaceLayout() {
   const activeTab = useUiStore((s) => s.activeTab);
   const statusText = useUiStore((s) => s.statusText);
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
   const queueItems = useQueueStore((s) => s.items);
+  const t = useT();
+  const locale = useLocaleStore((s) => s.locale);
+  const setLocale = useLocaleStore((s) => s.setLocale);
 
   // Start delta-sync polling on mount, stop on unmount
   useDeltaSync();
@@ -105,14 +156,15 @@ export default function WorkspaceLayout() {
     <section className="workspace-screen">
       <Sidebar />
       <section className="shell-main">
-        <div className="top-title">CEO Vault</div>
+        <div className="top-title">{t("header.title")}</div>
         <header className="shell-header">
           <div className="search-shell">
             <span className="search-icon">&#x2315;</span>
-            <span>Search everything...</span>
+            <span>{t("header.search")}</span>
             <kbd>&#x2318;K</kbd>
           </div>
-          <p>Status: {statusText}</p>
+          <LocaleDropdown locale={locale} setLocale={setLocale} />
+          <p>{t("header.status", { status: statusText })}</p>
         </header>
         <ActiveTabComponent />
       </section>
