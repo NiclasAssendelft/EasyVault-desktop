@@ -19,6 +19,7 @@
     {
       "identifier": "http:default",
       "allow": [
+        { "url": "https://*.supabase.co/*" },
         { "url": "https://*.services.base44.com/*" },
         { "url": "https://easy-vault.com/*" },
         { "url": "https://*.base44.app/*" },

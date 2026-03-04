@@ -1,4 +1,5 @@
 import { entityList, entityFilter, entityDelete, callDeltaSync, invokeBase44Function } from "../api";
+import { BACKEND } from "../config";
 import { getAuthToken, getPreferredUploadToken, getSavedEmail } from "../storage";
 import {
   asString, asBool, asArray, normalizeFolder, normalizeItem,
@@ -261,6 +262,8 @@ function parseEntitySchemasPayload(payload: unknown): EntitySchemasResponse {
 
 export async function refreshEntitySchemas(): Promise<void> {
   if (!canUseRemoteData()) return;
+  // entitySchemas is a Base44-only endpoint; skip when using Supabase
+  if (BACKEND === "supabase") return;
   const setStatus = useUiStore.getState().setStatus;
   const sync = useSyncStore.getState();
   try {
