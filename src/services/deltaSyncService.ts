@@ -19,8 +19,15 @@ function currentUserEmail(): string {
 
 function isOwnedByCurrentUser(row: Record<string, unknown>): boolean {
   const me = currentUserEmail();
-  if (!me) return true;
+  if (!me) return false;
   return asString(row.created_by).toLowerCase() === me;
+}
+
+/** Personal items must be owned by current user; shared-space items visible if space is accessible. */
+function isOwnedOrInSharedSpace(row: Record<string, unknown>): boolean {
+  const spaceId = asString(row.space_id);
+  if (spaceId) return spaceAllowed(spaceId);
+  return isOwnedByCurrentUser(row);
 }
 
 function spaceAllowed(spaceId: string): boolean {
@@ -81,7 +88,7 @@ export async function refreshFilesFromRemote(): Promise<void> {
     const filesStore = useFilesStore.getState();
 
     const newFolders = folders
-      .filter((row) => spaceAllowed(asString(row.space_id)))
+      .filter((row) => isOwnedOrInSharedSpace(row))
       .map((row) =>
         normalizeFolder({
           id: asString(row.id),
@@ -99,7 +106,7 @@ export async function refreshFilesFromRemote(): Promise<void> {
     }
 
     const allItems = items
-      .filter((row) => spaceAllowed(asString(row.space_id)))
+      .filter((row) => isOwnedOrInSharedSpace(row))
       .map((row) =>
         normalizeItem({
           id: asString(row.id),
@@ -322,7 +329,7 @@ export async function syncRemoteDelta(): Promise<void> {
       if (Array.isArray(folderChanges.updated)) {
         for (const row of folderChanges.updated) {
           const id = asString(row.id);
-          if (!id || !spaceAllowed(asString(row.space_id))) continue;
+          if (!id || !isOwnedOrInSharedSpace(row)) continue;
           const folder = normalizeFolder({
             id,
             name: asString(row.name, "Untitled folder"),
@@ -352,7 +359,7 @@ export async function syncRemoteDelta(): Promise<void> {
       if (Array.isArray(itemChanges.updated)) {
         for (const row of itemChanges.updated) {
           const id = asString(row.id);
-          if (!id || !spaceAllowed(asString(row.space_id))) continue;
+          if (!id || !isOwnedOrInSharedSpace(row)) continue;
           if (isOnlyofficeRelayTempTitle(asString(row.title))) continue;
           const item = normalizeItem({
             id,
