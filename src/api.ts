@@ -32,6 +32,7 @@ const TABLE_MAP: Record<string, string> = {
   SessionItem: "session_items",
   SavedSearch: "saved_searches",
   DeletedRecord: "deleted_records",
+  SpaceMember: "space_members",
 };
 
 // ── Base44 function → Supabase Edge Function name mapping ──────────

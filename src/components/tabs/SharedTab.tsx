@@ -4,6 +4,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { asString, toDisplayName } from "../../services/helpers";
 import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService";
+import { entityCreate } from "../../api";
 import { refreshSharedFromRemote, refreshAccessScope } from "../../services/deltaSyncService";
 import { invokeBase44Function } from "../../api";
 import { getSavedEmail } from "../../storage";
@@ -172,7 +173,11 @@ export default function SharedTab() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      await safeEntityCreate("Space", { name: newName.trim(), description: newDesc.trim(), space_type: "shared", members: [] });
+      const created = await safeEntityCreate<Record<string, unknown>>("Space", { name: newName.trim(), description: newDesc.trim(), space_type: "shared", members: [{ email: me, role: "owner" }] });
+      const spaceId = asString(created.id);
+      if (spaceId) {
+        await entityCreate("SpaceMember", { space_id: spaceId, user_email: me, role: "owner" });
+      }
       setStatus(t("shared.created", { name: newName.trim() }));
       await refreshAccessScope();
       await refreshSharedFromRemote();
