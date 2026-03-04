@@ -21,7 +21,6 @@ function formatDateShort(iso: string): string {
 
 export default function HomeTab() {
   const items = useFilesStore((s) => s.items);
-  const folders = useFilesStore((s) => s.folders);
   const events = useRemoteDataStore((s) => s.events);
   const emails = useRemoteDataStore((s) => s.emails);
   const spaces = useRemoteDataStore((s) => s.spaces);
@@ -261,15 +260,6 @@ export default function HomeTab() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* ── Stats footer ── */}
-      <div className="home-stats-footer">
-        <span>{t("home.fileCount", { count: items.length })}</span>
-        <span>{t("home.folders", { count: folders.length })}</span>
-        <span>{t("home.emailCount", { count: emails.length })}</span>
-        <span>{t("home.eventCount", { count: events.length })}</span>
-        <span>{t("home.spaceCount", { count: spaces.length })}</span>
       </div>
     </section>
   );
