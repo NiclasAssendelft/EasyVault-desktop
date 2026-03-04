@@ -15,7 +15,7 @@ import {
 } from "./config";
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
-import { getApiKey } from "./storage";
+import { getApiKey, getAuthToken } from "./storage";
 
 // ── Entity name → Supabase table name mapping ──────────────────────
 const TABLE_MAP: Record<string, string> = {
@@ -309,10 +309,11 @@ export async function invokeBase44Function<T = unknown>(
   // If we have a Supabase Edge Function for this, use it
   if (BACKEND === "supabase" && edgeName) {
     const url = `${SUPABASE_FUNCTIONS_URL}/${edgeName}`;
+    const userToken = token || withAuthToken();
     const res = await tauriFetch(url, {
       method: "POST",
-      headers: supabaseHeaders(SUPABASE_ANON_KEY),
-      body: JSON.stringify({ ...payload, token: token || withAuthToken() }),
+      headers: supabaseHeaders(userToken || SUPABASE_ANON_KEY),
+      body: JSON.stringify({ ...payload, token: userToken }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -796,7 +797,7 @@ export async function uploadFileWithToken(
     ? `${SUPABASE_FUNCTIONS_URL}/upload-init`
     : UPLOAD_INIT_URL;
   const initHeaders = BACKEND === "supabase"
-    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    ? supabaseHeaders(token || getAuthToken() || SUPABASE_ANON_KEY)
     : baseHeaders();
 
   const initRes = await tauriFetch(initUrl, {
@@ -840,8 +841,12 @@ export async function uploadFileWithToken(
     form.append("chunk_index", String(i));
     form.append("chunk", new Blob([chunkBytes], { type: "application/octet-stream" }), filename);
 
+    const chunkHeaders: Record<string, string> = BACKEND === "supabase"
+      ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token || getAuthToken() || SUPABASE_ANON_KEY}` }
+      : {};
     const chunkRes = await tauriFetch(chunkUrl, {
       method: "POST",
+      headers: chunkHeaders,
       body: form,
     });
     const chunkData = await chunkRes.json().catch(() => ({}));
@@ -865,7 +870,7 @@ export async function uploadFileWithToken(
       ? `${SUPABASE_FUNCTIONS_URL}/upload-complete`
       : UPLOAD_COMPLETE_URL;
     const completeHeaders = BACKEND === "supabase"
-      ? supabaseHeaders(SUPABASE_ANON_KEY)
+      ? supabaseHeaders(token || getAuthToken() || SUPABASE_ANON_KEY)
       : baseHeaders();
 
     const completeRes = await tauriFetch(completeUrl, {
