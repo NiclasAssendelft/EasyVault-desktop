@@ -8,8 +8,32 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 use reqwest::blocking::multipart;
 use sha2::{Digest, Sha256};
 
+/// Download a file from a URL and save directly to workspace — bypasses JS IPC byte transfer.
+#[tauri::command]
+fn download_and_save_to_workspace(url: &str, file_id: &str, filename: &str) -> Result<String, String> {
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .get(url)
+        .send()
+        .map_err(|e| format!("Download failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Download failed (HTTP {})", resp.status()));
+    }
+
+    let bytes = resp
+        .bytes()
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    save_file_to_workspace_inner(file_id, filename, &bytes)
+}
+
 #[tauri::command]
 fn save_file_to_workspace(file_id: &str, filename: &str, bytes: Vec<u8>) -> Result<String, String> {
+    save_file_to_workspace_inner(file_id, filename, &bytes)
+}
+
+fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> Result<String, String> {
     let home_dir = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
 
     let safe_file_id: String = file_id
@@ -914,6 +938,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            download_and_save_to_workspace,
             save_file_to_workspace,
             get_file_stat,
             read_file_bytes,

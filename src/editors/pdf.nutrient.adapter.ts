@@ -163,7 +163,7 @@ export const pdfNutrientAdapter: EditorAdapter = {
 
       (async () => {
         try {
-          const { tryCheckout, downloadFile, startAutoSync } = await import("./pdf.native.bridge");
+          const { tryCheckout, startAutoSync } = await import("./pdf.native.bridge");
 
           infoEl.textContent = t("pdf.checkingOut");
           const checkout = await tryCheckout(ctx.item.id);
@@ -171,11 +171,10 @@ export const pdfNutrientAdapter: EditorAdapter = {
           infoEl.textContent = t("pdf.downloading");
           const downloadUrl = checkout?.download_url || ctx.getPreviewUrl(ctx.item);
           if (!downloadUrl) throw new Error("No file URL available");
-          const bytes = await downloadFile(downloadUrl);
 
           infoEl.textContent = t("pdf.savingWorkspace");
-          const savedPath = await invoke<string>("save_file_to_workspace", {
-            fileId: ctx.item.id, filename: ctx.item.title, bytes: Array.from(bytes),
+          const savedPath = await invoke<string>("download_and_save_to_workspace", {
+            url: downloadUrl, fileId: ctx.item.id, filename: ctx.item.title,
           });
 
           infoEl.textContent = t("pdf.openingEditor");

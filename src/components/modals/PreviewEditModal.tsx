@@ -88,8 +88,7 @@ export default function PreviewEditModal() {
     if (!previewUrl) { setStatusText(t("previewEdit.noFileUrl")); return; }
     try {
       setStatusText(t("fileAction.downloading"));
-      const bytes = await downloadFile(previewUrl);
-      const savedPath = await invoke<string>("save_file_to_workspace", { fileId: item!.id, filename: item!.title, bytes: Array.from(bytes) });
+      const savedPath = await invoke<string>("download_and_save_to_workspace", { url: previewUrl, fileId: item!.id, filename: item!.title });
       setStatusText(t("fileAction.opening"));
       await openPath(savedPath);
       setStatusText("");

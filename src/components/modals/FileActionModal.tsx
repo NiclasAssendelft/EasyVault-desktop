@@ -5,7 +5,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { usePreviewEditStore } from "../../stores/previewEditStore";
 import { useSyncStore } from "../../stores/syncStore";
-import { downloadFile } from "../../api";
+
 import { getSavedEmail } from "../../storage";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -68,8 +68,7 @@ export default function FileActionModal() {
     if (!previewUrl) { setStatus(t("fileAction.noFileUrl")); return; }
     try {
       setStatus(t("fileAction.downloading"));
-      const bytes = await downloadFile(previewUrl);
-      const savedPath = await invoke<string>("save_file_to_workspace", { fileId: item.id, filename: item.title, bytes: Array.from(bytes) });
+      const savedPath = await invoke<string>("download_and_save_to_workspace", { url: previewUrl, fileId: item.id, filename: item.title });
       setStatus(t("fileAction.opening"));
       await openPath(savedPath);
       close();
