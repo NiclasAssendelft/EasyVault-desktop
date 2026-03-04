@@ -1,10 +1,14 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import {
   APP_API_BASE_URL,
+  BACKEND,
   CHECKOUT_FUNCTION_URL,
   FILE_LOCK_FUNCTION_URL,
   FILE_VERSIONS_FUNCTION_URL,
   LOGIN_URL,
+  SUPABASE_ANON_KEY,
+  SUPABASE_FUNCTIONS_URL,
+  SUPABASE_URL,
   UPLOAD_CHUNK_URL,
   UPLOAD_COMPLETE_URL,
   UPLOAD_INIT_URL,
@@ -12,6 +16,53 @@ import {
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
 import { getApiKey } from "./storage";
+
+// ── Entity name → Supabase table name mapping ──────────────────────
+const TABLE_MAP: Record<string, string> = {
+  Folder: "folders",
+  VaultItem: "vault_items",
+  EmailItem: "email_items",
+  CalendarEvent: "calendar_events",
+  Space: "spaces",
+  GatherPack: "gather_packs",
+  GatherPackItem: "gather_pack_items",
+  Tag: "tags",
+  ItemTag: "item_tags",
+  Session: "sessions",
+  SessionItem: "session_items",
+  SavedSearch: "saved_searches",
+  DeletedRecord: "deleted_records",
+};
+
+// ── Base44 function → Supabase Edge Function name mapping ──────────
+const EDGE_FUNCTION_MAP: Record<string, string> = {
+  deltaSync: "delta-sync",
+  desktopSave: "desktop-save",
+  desktopDelete: "desktop-delete",
+  getAccessibleSpaces: "get-accessible-spaces",
+  fileCheckout: "file-checkout",
+  fileLock: "file-lock",
+  fileVersions: "file-versions",
+  extensionAuth: "extension-auth",
+  extensionUploadInit: "upload-init",
+  extensionUploadChunk: "upload-chunk",
+  extensionUploadComplete: "upload-complete",
+};
+
+// ── Supabase field mapping (created_at → created_date for desktop app) ──
+function mapSupabaseRecord<T>(record: Record<string, unknown>): T {
+  return {
+    ...record,
+    created_date: record.created_at ?? record.created_date,
+    updated_date: record.updated_at ?? record.updated_date,
+  } as T;
+}
+
+function mapSupabaseRecords<T>(records: Record<string, unknown>[]): T[] {
+  return records.map((r) => mapSupabaseRecord<T>(r));
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 function hasRequiredCheckoutFields(data: CheckoutPayload): data is ResolvedCheckout {
   return Boolean(data.download_url && data.edit_session_id && data.file_metadata?.name);
@@ -85,6 +136,8 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
+// ── Headers ─────────────────────────────────────────────────────────
+
 export function baseHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -94,6 +147,23 @@ export function baseHeaders(token?: string): Record<string, string> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+function supabaseHeaders(token?: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+  };
+}
+
+function supabaseRestHeaders(token?: string): Record<string, string> {
+  return {
+    ...supabaseHeaders(token),
+    Prefer: "return=representation",
+  };
 }
 
 function withAuthToken(explicitToken?: string): string {
@@ -109,6 +179,8 @@ function unwrapData<T>(payload: unknown): T {
   }
   return payload as T;
 }
+
+// ── Base44 helpers (kept for fallback) ──────────────────────────────
 
 async function postJson<T>(url: string, body: unknown, token?: string): Promise<T> {
   const res = await tauriFetch(url, {
@@ -168,7 +240,6 @@ function recordMatchesFilters(record: Record<string, unknown>, filters: Record<s
       continue;
     }
     if (expected && typeof expected === "object") {
-      // Keep fallback predictable: only support flat equality filters client-side.
       return false;
     }
     if (actual !== expected) return false;
@@ -200,9 +271,61 @@ async function requestJsonCandidates<T>(candidates: CandidateRequest[], token?: 
   throw new Error(`${String(lastErr ?? "All candidate routes failed")}\nTried:\n${preview}${rest}`);
 }
 
-export async function invokeBase44Function<T = unknown>(name: string, payload: Record<string, unknown> = {}, token?: string): Promise<T> {
+// ── Supabase PostgREST helpers ──────────────────────────────────────
+
+function sortToPostgrest(sort: string): string {
+  // Base44 format: "-created_date" → PostgREST: "created_at.desc"
+  const desc = sort.startsWith("-");
+  const field = sort.replace(/^-/, "");
+  // Map Base44 field names to Supabase column names
+  const fieldMap: Record<string, string> = {
+    created_date: "created_at",
+    updated_date: "updated_at",
+    "-created_date": "created_at",
+    "-updated_date": "updated_at",
+  };
+  const col = fieldMap[field] || field;
+  return `${col}.${desc ? "desc" : "asc"}`;
+}
+
+function filtersToPostgrest(filters: Record<string, unknown>): string {
+  const params: string[] = [];
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null) continue;
+    params.push(`${key}=eq.${encodeURIComponent(String(value))}`);
+  }
+  return params.join("&");
+}
+
+// ── Core API Functions ──────────────────────────────────────────────
+
+export async function invokeBase44Function<T = unknown>(
+  name: string,
+  payload: Record<string, unknown> = {},
+  token?: string
+): Promise<T> {
+  const edgeName = EDGE_FUNCTION_MAP[name];
+
+  // If we have a Supabase Edge Function for this, use it
+  if (BACKEND === "supabase" && edgeName) {
+    const url = `${SUPABASE_FUNCTIONS_URL}/${edgeName}`;
+    const res = await tauriFetch(url, {
+      method: "POST",
+      headers: supabaseHeaders(SUPABASE_ANON_KEY),
+      body: JSON.stringify({ ...payload, token: token || withAuthToken() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(`${name} failed (${res.status}): ${JSON.stringify(data)}`);
+    }
+    return data as T;
+  }
+
+  // Fallback to Base44 for unmigrated functions
   return postJson<T>(`${APP_API_BASE_URL}/functions/${name}`, payload, token);
 }
+
+// ── Delta Sync ──────────────────────────────────────────────────────
 
 type DeltaSyncEntityChange<T = Record<string, unknown>> = {
   updated: T[];
@@ -243,6 +366,8 @@ export async function callDeltaSync(
   return invokeBase44Function<DeltaSyncResponse>("deltaSync", payload, token);
 }
 
+// ── Desktop Save (conflict-aware update) ────────────────────────────
+
 export async function callDesktopSave<T = Record<string, unknown>>(
   entityName: string,
   id: string,
@@ -250,6 +375,38 @@ export async function callDesktopSave<T = Record<string, unknown>>(
   lastKnownUpdatedDate: string,
   token?: string
 ): Promise<DesktopSaveSuccess<T> | DesktopSaveConflict<T>> {
+  if (BACKEND === "supabase") {
+    const url = `${SUPABASE_FUNCTIONS_URL}/desktop-save`;
+    const res = await tauriFetch(url, {
+      method: "POST",
+      headers: supabaseHeaders(SUPABASE_ANON_KEY),
+      body: JSON.stringify({
+        entity_name: entityName,
+        id,
+        patch,
+        last_known_updated_date: lastKnownUpdatedDate,
+        token: token || withAuthToken(),
+      }),
+    });
+
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status === 409) {
+      return {
+        ok: false,
+        status: 409,
+        error: "conflict",
+        currentRecord: ((payload.current_record as T | undefined) ?? null),
+        serverUpdatedDate: String(payload.server_updated_date ?? ""),
+      };
+    }
+    if (!res.ok) {
+      throw new Error(`desktopSave failed (${res.status}): ${JSON.stringify(payload)}`);
+    }
+    const record = (payload.record as T | undefined) ?? (payload as unknown as T);
+    return { ok: true, record };
+  }
+
+  // Base44 path
   const url = `${APP_API_BASE_URL}/functions/desktopSave`;
   const res = await tauriFetch(url, {
     method: "POST",
@@ -279,12 +436,30 @@ export async function callDesktopSave<T = Record<string, unknown>>(
   return { ok: true, record };
 }
 
+// ── Entity CRUD ─────────────────────────────────────────────────────
+
 export async function entityList<T = Record<string, unknown>>(
   entityName: string,
   sort: string = "-created_date",
   limit = 200,
   token?: string
 ): Promise<T[]> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      const order = sortToPostgrest(sort);
+      const url = `${SUPABASE_URL}/rest/v1/${table}?order=${order}&limit=${limit}&select=*`;
+      const res = await tauriFetch(url, {
+        method: "GET",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+      });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(`entityList ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+      return mapSupabaseRecords<T>(Array.isArray(data) ? data : []);
+    }
+  }
+
+  // Base44 fallback
   const candidates: CandidateRequest[] = [
     ...entityOpCandidates(entityName, "list").map((url) => ({ url, method: "POST" as const, body: { sort, limit } })),
     ...entityOpCandidates(entityName, "list").map((url) => ({ url, method: "POST" as const, body: { order: sort, limit } })),
@@ -310,7 +485,6 @@ export async function entityList<T = Record<string, unknown>>(
   try {
     return await requestJsonCandidates<T[]>(candidates, token);
   } catch {
-    // Final fallback for deployments where "list" is unavailable but "filter" works.
     return entityFilter<T>(entityName, {}, sort, limit, token);
   }
 }
@@ -322,6 +496,24 @@ export async function entityFilter<T = Record<string, unknown>>(
   limit = 200,
   token?: string
 ): Promise<T[]> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      const order = sortToPostgrest(sort);
+      const filterParams = filtersToPostgrest(filters);
+      const sep = filterParams ? "&" : "";
+      const url = `${SUPABASE_URL}/rest/v1/${table}?order=${order}&limit=${limit}&select=*${sep}${filterParams}`;
+      const res = await tauriFetch(url, {
+        method: "GET",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+      });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(`entityFilter ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+      return mapSupabaseRecords<T>(Array.isArray(data) ? data : []);
+    }
+  }
+
+  // Base44 fallback
   const candidates: CandidateRequest[] = [
     ...entityOpCandidates(entityName, "filter").map((url) => ({ url, method: "POST" as const, body: { filters, sort, limit } })),
     ...entityOpCandidates(entityName, "filter").map((url) => ({ url, method: "POST" as const, body: { query: filters, sort, limit } })),
@@ -350,7 +542,6 @@ export async function entityFilter<T = Record<string, unknown>>(
   try {
     return await requestJsonCandidates<T[]>(candidates, token);
   } catch {
-    // Fallback for deployments where server-side filter endpoints are unavailable.
     const all = await entityList<Record<string, unknown>>(entityName, sort, Math.max(limit, 500), token);
     const filtered = all.filter((row) => recordMatchesFilters(row, filters));
     return filtered.slice(0, limit) as T[];
@@ -358,6 +549,23 @@ export async function entityFilter<T = Record<string, unknown>>(
 }
 
 export async function entityGet<T = Record<string, unknown>>(entityName: string, id: string, token?: string): Promise<T> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}&select=*`;
+      const res = await tauriFetch(url, {
+        method: "GET",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+      });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(`entityGet ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+      const rows = Array.isArray(data) ? data : [];
+      if (rows.length === 0) throw new Error(`${entityName} not found: ${id}`);
+      return mapSupabaseRecord<T>(rows[0]);
+    }
+  }
+
+  // Base44 fallback
   const candidates: CandidateRequest[] = [
     ...entityOpCandidates(entityName, "get").map((url) => ({ url, method: "POST" as const, body: { id } })),
     { url: `${APP_API_BASE_URL}/entities/${entityName}/${id}`, method: "GET" },
@@ -371,6 +579,26 @@ export async function entityCreate<T = Record<string, unknown>>(
   data: Record<string, unknown>,
   token?: string
 ): Promise<T> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      // Add created_by from token email (service will handle via RLS)
+      const email = localStorage.getItem("easyvault_email") || "";
+      const payload = { ...data, created_by: email };
+      const url = `${SUPABASE_URL}/rest/v1/${table}`;
+      const res = await tauriFetch(url, {
+        method: "POST",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`entityCreate ${entityName} failed (${res.status}): ${JSON.stringify(result)}`);
+      const rows = Array.isArray(result) ? result : [result];
+      return mapSupabaseRecord<T>(rows[0]);
+    }
+  }
+
+  // Base44 fallback
   const candidates: CandidateRequest[] = [
     ...entityOpCandidates(entityName, "create").map((url) => ({ url, method: "POST" as const, body: data })),
     ...entityOpCandidates(entityName, "create").map((url) => ({ url, method: "POST" as const, body: { data } })),
@@ -388,6 +616,23 @@ export async function entityUpdate<T = Record<string, unknown>>(
   data: Record<string, unknown>,
   token?: string
 ): Promise<T> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+      const res = await tauriFetch(url, {
+        method: "PATCH",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+        body: JSON.stringify(data),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`entityUpdate ${entityName} failed (${res.status}): ${JSON.stringify(result)}`);
+      const rows = Array.isArray(result) ? result : [result];
+      return mapSupabaseRecord<T>(rows[0]);
+    }
+  }
+
+  // Base44 fallback
   const patchData = { id, ...data };
   const candidates: CandidateRequest[] = [
     ...entityOpCandidates(entityName, "update").map((url) => ({ url, method: "POST" as const, body: patchData })),
@@ -401,6 +646,23 @@ export async function entityUpdate<T = Record<string, unknown>>(
 }
 
 export async function entityDelete(entityName: string, id: string, token?: string): Promise<void> {
+  if (BACKEND === "supabase") {
+    const table = TABLE_MAP[entityName];
+    if (table) {
+      const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+      const res = await tauriFetch(url, {
+        method: "DELETE",
+        headers: supabaseRestHeaders(withAuthToken(token)),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(`entityDelete ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+      }
+      return;
+    }
+  }
+
+  // Base44 fallback
   const deleteOpUrls = entityOpCandidates(entityName, "delete");
   const deleteOpUrlsWithSlash = deleteOpUrls.map(withTrailingSlash);
   const candidates: CandidateRequest[] = [
@@ -444,26 +706,55 @@ export async function entityDelete(entityName: string, id: string, token?: strin
   await requestJsonCandidates<unknown>(candidates, token);
 }
 
+// ── Login ───────────────────────────────────────────────────────────
+
 export async function login(email: string, password: string): Promise<string> {
+  if (BACKEND === "supabase") {
+    const url = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { access_token?: string };
+    if (!res.ok || !data.access_token) {
+      throw new Error(`login failed (${res.status})`);
+    }
+    return data.access_token;
+  }
+
+  // Base44
   const res = await fetch(LOGIN_URL, {
     method: "POST",
     credentials: "omit",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-
   const data = (await res.json().catch(() => ({}))) as { access_token?: string };
   if (!res.ok || !data.access_token) {
     throw new Error(`login failed (${res.status})`);
   }
-
   return data.access_token;
 }
 
+// ── File Operations ─────────────────────────────────────────────────
+
 export async function checkoutFile(fileId: string, requestToken: string): Promise<ResolvedCheckout> {
-  const res = await tauriFetch(CHECKOUT_FUNCTION_URL, {
+  const url = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/file-checkout`
+    : CHECKOUT_FUNCTION_URL;
+
+  const headers = BACKEND === "supabase"
+    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    : baseHeaders(requestToken);
+
+  const res = await tauriFetch(url, {
     method: "POST",
-    headers: baseHeaders(requestToken),
+    headers,
     body: JSON.stringify({
       token: requestToken,
       fileId,
@@ -501,9 +792,16 @@ export async function uploadFileWithToken(
   const totalChunks = Math.max(1, Math.ceil(bytes.length / CHUNK_SIZE));
   const mimeType = guessMimeType(filename);
 
-  const initRes = await tauriFetch(UPLOAD_INIT_URL, {
+  const initUrl = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/upload-init`
+    : UPLOAD_INIT_URL;
+  const initHeaders = BACKEND === "supabase"
+    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    : baseHeaders();
+
+  const initRes = await tauriFetch(initUrl, {
     method: "POST",
-    headers: baseHeaders(),
+    headers: initHeaders,
     body: JSON.stringify({
       token,
       filename,
@@ -527,6 +825,10 @@ export async function uploadFileWithToken(
   let fileUrl = extractFileUrl(initData);
   const chunkUrls: string[] = [];
 
+  const chunkUrl = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/upload-chunk`
+    : UPLOAD_CHUNK_URL;
+
   for (let i = 0; i < totalChunks; i += 1) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, bytes.length);
@@ -538,7 +840,7 @@ export async function uploadFileWithToken(
     form.append("chunk_index", String(i));
     form.append("chunk", new Blob([chunkBytes], { type: "application/octet-stream" }), filename);
 
-    const chunkRes = await tauriFetch(UPLOAD_CHUNK_URL, {
+    const chunkRes = await tauriFetch(chunkUrl, {
       method: "POST",
       body: form,
     });
@@ -559,9 +861,16 @@ export async function uploadFileWithToken(
 
   let completeData: unknown = null;
   if (!fileUrl) {
-    const completeRes = await tauriFetch(UPLOAD_COMPLETE_URL, {
+    const completeUrl = BACKEND === "supabase"
+      ? `${SUPABASE_FUNCTIONS_URL}/upload-complete`
+      : UPLOAD_COMPLETE_URL;
+    const completeHeaders = BACKEND === "supabase"
+      ? supabaseHeaders(SUPABASE_ANON_KEY)
+      : baseHeaders();
+
+    const completeRes = await tauriFetch(completeUrl, {
       method: "POST",
-      headers: baseHeaders(),
+      headers: completeHeaders,
       body: JSON.stringify({
         token,
         upload_id: uploadId,
@@ -589,9 +898,16 @@ export async function uploadFileWithToken(
 }
 
 export async function createNewVersion(session: ActiveEditSession, fileUrl: string, checksum: string): Promise<void> {
-  const res = await tauriFetch(FILE_VERSIONS_FUNCTION_URL, {
+  const url = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/file-versions`
+    : FILE_VERSIONS_FUNCTION_URL;
+  const headers = BACKEND === "supabase"
+    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    : baseHeaders(session.authToken);
+
+  const res = await tauriFetch(url, {
     method: "POST",
-    headers: baseHeaders(session.authToken),
+    headers,
     body: JSON.stringify({
       token: session.extensionToken,
       fileId: session.fileId,
@@ -611,9 +927,16 @@ export async function listVersions(
   token: string,
   fileId: string
 ): Promise<Array<Record<string, unknown>>> {
-  const res = await tauriFetch(FILE_VERSIONS_FUNCTION_URL, {
+  const url = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/file-versions`
+    : FILE_VERSIONS_FUNCTION_URL;
+  const headers = BACKEND === "supabase"
+    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    : baseHeaders(token);
+
+  const res = await tauriFetch(url, {
     method: "POST",
-    headers: baseHeaders(token),
+    headers,
     body: JSON.stringify({
       token,
       fileId,
@@ -628,9 +951,16 @@ export async function listVersions(
 }
 
 export async function callFileLock(token: string, fileId: string, action: "lock" | "unlock"): Promise<void> {
-  const res = await tauriFetch(FILE_LOCK_FUNCTION_URL, {
+  const url = BACKEND === "supabase"
+    ? `${SUPABASE_FUNCTIONS_URL}/file-lock`
+    : FILE_LOCK_FUNCTION_URL;
+  const headers = BACKEND === "supabase"
+    ? supabaseHeaders(SUPABASE_ANON_KEY)
+    : baseHeaders(token);
+
+  const res = await tauriFetch(url, {
     method: "POST",
-    headers: baseHeaders(token),
+    headers,
     body: JSON.stringify({ token, fileId, action }),
   });
   const data = await res.json().catch(() => ({}));
