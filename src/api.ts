@@ -55,6 +55,9 @@ const EDGE_FUNCTION_MAP: Record<string, string> = {
   syncGmail: "sync-gmail",
   syncOutlookEmails: "sync-outlook-emails",
   syncOutlookCalendar: "sync-outlook-calendar",
+  spaceInvite: "space-invite",
+  spaceRemoveMember: "space-remove-member",
+  spaceMessages: "space-messages",
 };
 
 // ── Supabase field mapping (created_at → created_date for desktop app) ──
