@@ -140,15 +140,22 @@ fn list_folder_files(path: &str) -> Result<Vec<LocalFolderFile>, String> {
 }
 
 const ONLYOFFICE_RELAY_PORT_DEFAULT: u16 = 17171;
+const SUPABASE_FUNCTIONS_URL: &str =
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1";
+const SUPABASE_ANON_KEY: &str =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jb2tvZW1mbWRvZHpmdHFiamltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTA2NjgsImV4cCI6MjA4ODE4NjY2OH0.YQPrNUVDCgIDYP5054PoRdnDyph70gPcNJZSlHjbUH8";
 const ONLYOFFICE_CALLBACK_TARGET: &str =
-    "https://easy-vault.com/api/apps/69970fbb1f1de2b0bede99df/functions/onlyofficeCallback";
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/onlyoffice-callback";
 const ONLYOFFICE_COMMIT_TARGET: &str =
-    "https://easy-vault.com/api/apps/69970fbb1f1de2b0bede99df/functions/onlyofficeCommit";
-const UPLOAD_INIT_URL: &str = "https://ceo-vault.base44.app/api/functions/extensionUploadInit";
-const UPLOAD_CHUNK_URL: &str = "https://ceo-vault.base44.app/api/functions/extensionUploadChunk";
-const UPLOAD_COMPLETE_URL: &str = "https://ceo-vault.base44.app/api/functions/extensionUploadComplete";
-const FILE_VERSIONS_URL: &str = "https://ceo-vault.base44.app/api/functions/fileVersions";
-const DEFAULT_API_KEY: &str = "830e035bb5ad402a9534f1ac08cf2dc6";
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/onlyoffice-commit";
+const UPLOAD_INIT_URL: &str =
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/upload-init";
+const UPLOAD_CHUNK_URL: &str =
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/upload-chunk";
+const UPLOAD_COMPLETE_URL: &str =
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/upload-complete";
+const FILE_VERSIONS_URL: &str =
+    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/file-versions";
 const CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
 #[derive(Serialize)]
@@ -198,20 +205,13 @@ fn set_onlyoffice_relay_auth(token: String, api_key: Option<String>) -> Result<(
     if clean_token.is_empty() {
         return Err("token is required".to_string());
     }
-    let clean_api_key = api_key
-        .unwrap_or_else(|| DEFAULT_API_KEY.to_string())
-        .trim()
-        .to_string();
+    let clean_api_key = api_key.unwrap_or_default().trim().to_string();
     let mut guard = relay_auth_store()
         .lock()
         .map_err(|_| "relay auth lock poisoned".to_string())?;
     *guard = Some(RelayAuth {
         token: clean_token,
-        api_key: if clean_api_key.is_empty() {
-            DEFAULT_API_KEY.to_string()
-        } else {
-            clean_api_key
-        },
+        api_key: clean_api_key,
     });
     Ok(())
 }
@@ -241,18 +241,55 @@ fn infer_office_ext_from_callback_url(url: &str) -> &'static str {
     "docx"
 }
 
+fn is_uuid(s: &str) -> bool {
+    // UUID format: 8-4-4-4-12 hex digits with dashes
+    s.len() == 36
+        && s.chars().enumerate().all(|(i, c)| {
+            if i == 8 || i == 13 || i == 18 || i == 23 {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
+}
+
 fn is_hex_24(s: &str) -> bool {
     s.len() == 24 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn extract_file_id_from_key(key: &str) -> Option<String> {
-    let primary = key.split('_').next().unwrap_or("").trim();
+    // Key format: "{uuid}_v{version}_{timestamp}" or "{hex24}_v{version}_{timestamp}"
+    // Try UUID first (36 chars with dashes)
+    if key.len() >= 36 {
+        let candidate = &key[..36];
+        if is_uuid(candidate) {
+            return Some(candidate.to_string());
+        }
+    }
+
+    // Fallback: split on "_v" and check first part
+    let primary = key.split("_v").next().unwrap_or("").trim();
+    if is_uuid(primary) {
+        return Some(primary.to_string());
+    }
     if is_hex_24(primary) {
         return Some(primary.to_string());
     }
 
-    // Fallback: scan key for any 24-char hex token.
+    // Last resort: scan for UUID pattern
     let bytes = key.as_bytes();
+    for i in 0..bytes.len() {
+        let end = i + 36;
+        if end > bytes.len() {
+            break;
+        }
+        if let Some(slice) = key.get(i..end) {
+            if is_uuid(slice) {
+                return Some(slice.to_string());
+            }
+        }
+    }
+    // Scan for 24-char hex (legacy Base44 IDs)
     for i in 0..bytes.len() {
         let end = i + 24;
         if end > bytes.len() {
@@ -360,7 +397,7 @@ fn extract_file_url(payload: &serde_json::Value) -> Option<String> {
     None
 }
 
-fn upload_bytes_to_base44(
+fn upload_bytes_to_storage(
     client: &reqwest::blocking::Client,
     auth: &RelayAuth,
     filename: &str,
@@ -379,7 +416,8 @@ fn upload_bytes_to_base44(
     let init_res = client
         .post(UPLOAD_INIT_URL)
         .header("Content-Type", "application/json")
-        .header("api_key", &auth.api_key)
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Authorization", format!("Bearer {}", auth.token))
         .body(init_payload.to_string())
         .send()
         .map_err(|e| format!("upload init request failed: {e}"))?;
@@ -407,6 +445,8 @@ fn upload_bytes_to_base44(
             .part("chunk", part);
         let chunk_res = client
             .post(UPLOAD_CHUNK_URL)
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", auth.token))
             .multipart(form)
             .send()
             .map_err(|e| format!("chunk upload request failed: {e}"))?;
@@ -436,7 +476,8 @@ fn upload_bytes_to_base44(
         let complete_res = client
             .post(UPLOAD_COMPLETE_URL)
             .header("Content-Type", "application/json")
-            .header("api_key", &auth.api_key)
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", auth.token))
             .body(complete_payload.to_string())
             .send()
             .map_err(|e| format!("upload complete request failed: {e}"))?;
@@ -481,7 +522,7 @@ fn call_onlyoffice_commit(
     let res = client
         .post(ONLYOFFICE_COMMIT_TARGET)
         .header("Content-Type", "application/json")
-        .header("api_key", &auth.api_key)
+        .header("apikey", SUPABASE_ANON_KEY)
         .header("Authorization", format!("Bearer {}", auth.token))
         .body(payload.to_string())
         .send()
@@ -512,7 +553,8 @@ fn call_file_versions_fallback(
     let res = client
         .post(FILE_VERSIONS_URL)
         .header("Content-Type", "application/json")
-        .header("api_key", &auth.api_key)
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Authorization", format!("Bearer {}", auth.token))
         .body(payload.to_string())
         .send()
         .map_err(|e| format!("fileVersions request failed: {e}"))?;
@@ -665,7 +707,7 @@ fn start_onlyoffice_callback_relay() {
 
                             let ext = infer_office_ext_from_callback_url(&callback_url);
                             let filename = format!("onlyoffice_{}.{}", key, ext);
-                            let upload_url = match upload_bytes_to_base44(&client, &auth, &filename, &bytes) {
+                            let upload_url = match upload_bytes_to_storage(&client, &auth, &filename, &bytes) {
                                 Ok(url) => url,
                                 Err(err) => {
                                     if let Ok(mut stats) = relay_stats_store().lock() {
@@ -804,10 +846,13 @@ fn start_onlyoffice_callback_relay() {
             let mut upstream = client
                 .post(ONLYOFFICE_CALLBACK_TARGET)
                 .header("Content-Type", "application/json")
+                .header("apikey", SUPABASE_ANON_KEY)
                 .body(body);
 
             if let Some(auth_header) = request.headers().iter().find(|h| h.field.equiv("Authorization")) {
                 upstream = upstream.header("Authorization", auth_header.value.as_str());
+            } else if let Some(auth) = get_relay_auth() {
+                upstream = upstream.header("Authorization", format!("Bearer {}", auth.token));
             }
 
             match upstream.send() {
