@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { invokeBase44Function, listVersions } from "../api";
-import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret, getOnlyofficeServerUrl } from "../storage";
+import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret, getOnlyofficeServerUrl, getDeviceId } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useUiStore } from "../stores/uiStore";
@@ -294,7 +294,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     const payload = await invokeBase44Function<Record<string, unknown>>("onlyofficeEditorSession", {
       fileId,
       mode: "edit",
-      device_id: "easyvault-desktop-mac",
+      device_id: getDeviceId(),
     });
 
     const editorNode = (payload.editor as Record<string, unknown> | undefined) || payload;

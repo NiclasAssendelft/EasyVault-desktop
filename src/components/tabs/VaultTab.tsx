@@ -113,7 +113,7 @@ export default function VaultTab() {
   const handleSavePack = useCallback(async () => {
     if (!pendingResult) return;
     const selectedItems = pendingResult.flatItems.filter((it) => selectedIds.has(it.item_id));
-    if (selectedItems.length === 0) { setStatus("Select at least one item"); return; }
+    if (selectedItems.length === 0) { setStatus(t("vault.selectAtLeastOne")); return; }
     setSaving(true);
     try {
       const title = packName.trim() || pendingResult.packTitle;
@@ -172,28 +172,28 @@ export default function VaultTab() {
       if (found) {
         useUiStore.getState().setFileActionTargetId(item.item_id);
       } else {
-        setStatus(`Item not found locally: "${item.title}"`);
+        setStatus(t("vault.itemNotFound", { title: item.title }));
       }
     } else if (item.item_type === "email") {
       const found = useRemoteDataStore.getState().emails.find((e) => asString(e.id) === item.item_id);
       if (found) {
         useUiStore.getState().openManageModal({ kind: "item", id: item.item_id, entity: "EmailItem" }, "");
       } else {
-        setStatus(`Email not found locally: "${item.title}"`);
+        setStatus(t("vault.emailNotFound", { title: item.title }));
       }
     } else if (item.item_type === "calendar") {
       const found = useRemoteDataStore.getState().events.find((e) => asString(e.id) === item.item_id);
       if (found) {
         useUiStore.getState().openManageModal({ kind: "item", id: item.item_id, entity: "CalendarEvent" }, "");
       } else {
-        setStatus(`Event not found locally: "${item.title}"`);
+        setStatus(t("vault.eventNotFound", { title: item.title }));
       }
     }
   }, [setStatus]);
 
   const handleSaveAsFolder = useCallback(async (folderName: string, items: PackDetailItem[]) => {
     const vaultItems = items.filter((it) => it.item_type === "vault");
-    if (vaultItems.length === 0) { setStatus("No vault files to put in a folder"); return; }
+    if (vaultItems.length === 0) { setStatus(t("vault.noVaultFiles")); return; }
     try {
       const { personalSpaceId } = useAuthStore.getState();
       const result = await safeEntityCreate<Record<string, unknown>>("Folder", {
@@ -201,7 +201,7 @@ export default function VaultTab() {
       });
       const record = result as Record<string, unknown>;
       const folderId = asString(record?.id);
-      if (!folderId) { setStatus("Failed to create folder"); return; }
+      if (!folderId) { setStatus(t("vault.folderCreateFailed", { error: "missing id" })); return; }
       const updatedAt = asString(record?.updated_date) || new Date().toISOString();
       const newFolder = normalizeFolder({ id: folderId, name: folderName, createdAtIso: new Date().toISOString(), spaceId: personalSpaceId });
       useSyncStore.getState().setEntityUpdatedAt("Folder", folderId, updatedAt);
@@ -210,9 +210,9 @@ export default function VaultTab() {
         useFilesStore.getState().updateItem(vi.item_id, { folderId });
       }
       useFilesStore.getState().persist();
-      setStatus(`Folder "${folderName}" created with ${vaultItems.length} files`);
+      setStatus(t("vault.folderCreated", { name: folderName, count: vaultItems.length }));
     } catch (err) {
-      setStatus(`Failed to create folder: ${String(err)}`);
+      setStatus(t("vault.folderCreateFailed", { error: String(err) }));
     }
   }, [setStatus]);
 
@@ -264,7 +264,7 @@ export default function VaultTab() {
                   }
                 }}
               />
-              {selectedIds.size}/{pendingResult.flatItems.length} selected
+              {t("vault.selected", { selected: selectedIds.size, total: pendingResult.flatItems.length })}
             </label>
           </div>
           <div className="gather-result-items">
@@ -363,7 +363,7 @@ export default function VaultTab() {
                           className="pack-to-folder-btn"
                           onClick={(e) => { e.stopPropagation(); void handleSaveAsFolder(title, packItems); }}
                         >
-                          Save as Folder
+                          {tr("vault.saveAsFolder")}
                         </button>
                       </>
                     )}

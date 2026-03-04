@@ -104,6 +104,15 @@ export function setOnlyofficeServerUrl(url: string): void {
   }
 }
 
+export function getDeviceId(): string {
+  let id = localStorage.getItem(STORAGE_KEYS.deviceId);
+  if (!id) {
+    id = `ev-${crypto.randomUUID()}`;
+    localStorage.setItem(STORAGE_KEYS.deviceId, id);
+  }
+  return id;
+}
+
 export function getEmailSyncCount(): number {
   const raw = localStorage.getItem(STORAGE_KEYS.emailSyncCount);
   const n = Number(raw);

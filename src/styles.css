@@ -162,7 +162,7 @@ h1 {
 }
 
 .nav-btn[data-tab="home"]::before {
-  content: "⌂";
+  content: "🏠";
 }
 
 .nav-btn[data-tab="files"]::before {
@@ -170,27 +170,27 @@ h1 {
 }
 
 .nav-btn[data-tab="email"]::before {
-  content: "✉";
+  content: "📧";
 }
 
 .nav-btn[data-tab="calendar"]::before {
-  content: "☷";
+  content: "📅";
 }
 
 .nav-btn[data-tab="vault"]::before {
-  content: "◍";
+  content: "🔒";
 }
 
 .nav-btn[data-tab="shared"]::before {
-  content: "◌";
+  content: "👥";
 }
 
 .nav-btn[data-tab="queue"]::before {
-  content: "⤴";
+  content: "📥";
 }
 
 .nav-btn[data-tab="settings"]::before {
-  content: "⚙";
+  content: "⚙️";
 }
 
 .nav-btn:hover {
@@ -2346,6 +2346,32 @@ button:disabled {
   color: #f87171;
   border-color: #f8717133;
   background: rgba(248, 113, 113, 0.08);
+}
+.confirm-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.confirm-inline span { white-space: nowrap; }
+.confirm-yes {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.confirm-no {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /* Space settings */

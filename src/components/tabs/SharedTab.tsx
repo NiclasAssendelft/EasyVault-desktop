@@ -100,6 +100,10 @@ export default function SharedTab() {
   // Card menu
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
+  // Confirm dialogs (replacing window.confirm)
+  const [confirmRemoveEmail, setConfirmRemoveEmail] = useState<string | null>(null);
+  const [confirmDeleteSpaceId, setConfirmDeleteSpaceId] = useState<string | null>(null);
+
   const me = currentUserEmail();
 
   const activeSpace = useMemo(
@@ -235,10 +239,10 @@ export default function SharedTab() {
 
   const handleRemoveMember = useCallback(async (email: string) => {
     if (!activeSpaceId) return;
-    if (!confirm(t("shared.removeConfirm", { email }))) return;
     try {
       await invokeBase44Function("spaceRemoveMember", { space_id: activeSpaceId, email });
       setStatus(t("shared.removed", { email }));
+      setConfirmRemoveEmail(null);
       await refreshSharedFromRemote();
     } catch (err) {
       setStatus(t("shared.removeFailed", { error: String(err) }));
@@ -258,18 +262,18 @@ export default function SharedTab() {
   }, [activeSpace, activeSpaceId, editName, editDesc, setStatus]);
 
   const handleDeleteSpace = useCallback(async (spaceId: string) => {
-    if (!confirm(tr("shared.deleteConfirm"))) return;
     try {
       await entityDelete("Space", spaceId);
       setStatus(t("shared.deleted"));
       setActiveSpaceId(null);
       setMenuOpenId(null);
+      setConfirmDeleteSpaceId(null);
       await refreshAccessScope();
       await refreshSharedFromRemote();
     } catch (err) {
-      setStatus(t("shared.createFailed", { error: String(err) }));
+      setStatus(t("shared.deleteFailed", { error: String(err) }));
     }
-  }, [setStatus, tr]);
+  }, [setStatus]);
 
   // All people in the space (creator + members) — must be before early return to avoid hooks violation
   const allMembers = useMemo(() => {
@@ -339,7 +343,7 @@ export default function SharedTab() {
                     </button>
                     {menuOpenId === id && (
                       <div className="space-card-menu">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteSpace(id); }}>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmDeleteSpaceId(id); setMenuOpenId(null); }}>
                           {tr("shared.deleteSpace")}
                         </button>
                       </div>
@@ -364,6 +368,30 @@ export default function SharedTab() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Delete Space Confirm Modal */}
+        {confirmDeleteSpaceId && (
+          <div className="modal">
+            <div className="modal-backdrop" onClick={() => setConfirmDeleteSpaceId(null)} />
+            <div className="modal-panel">
+              <div className="modal-head">
+                <h3>{tr("shared.deleteSpace")}</h3>
+                <button type="button" onClick={() => setConfirmDeleteSpaceId(null)}>&times;</button>
+              </div>
+              <div className="form" style={{ padding: "0 16px 16px" }}>
+                <p>{tr("shared.deleteConfirm")}</p>
+                <div className="actions-row">
+                  <button type="button" className="ghost" onClick={() => setConfirmDeleteSpaceId(null)}>
+                    {tr("shared.cancel")}
+                  </button>
+                  <button type="button" style={{ background: "#ef4444" }} onClick={() => handleDeleteSpace(confirmDeleteSpaceId)}>
+                    {tr("shared.deleteSpace")}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -539,13 +567,21 @@ export default function SharedTab() {
                   </div>
                   <span className={`space-member-role ${roleClass}`}>{tr(roleKey)}</span>
                   {isOwner && m.role !== "owner" && (
-                    <button
-                      type="button"
-                      className="space-member-remove"
-                      onClick={() => handleRemoveMember(m.email)}
-                    >
-                      {tr("shared.removeMember")}
-                    </button>
+                    confirmRemoveEmail === m.email ? (
+                      <div className="confirm-inline">
+                        <span>{tr("shared.removeConfirm", { email: m.email })}</span>
+                        <button type="button" className="confirm-yes" onClick={() => handleRemoveMember(m.email)}>{tr("delete.submit")}</button>
+                        <button type="button" className="confirm-no" onClick={() => setConfirmRemoveEmail(null)}>{tr("shared.cancel")}</button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="space-member-remove"
+                        onClick={() => setConfirmRemoveEmail(m.email)}
+                      >
+                        {tr("shared.removeMember")}
+                      </button>
+                    )
                   )}
                 </div>
               );

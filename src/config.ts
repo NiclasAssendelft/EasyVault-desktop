@@ -32,6 +32,7 @@ export const STORAGE_KEYS = {
   locale: "easyvault_locale",
   emailSyncCount: "easyvault_email_sync_count",
   refreshToken: "easyvault_refresh_token",
+  deviceId: "easyvault_device_id",
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";

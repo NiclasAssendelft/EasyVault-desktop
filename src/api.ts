@@ -15,7 +15,7 @@ import {
 } from "./config";
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
-import { getApiKey, getAuthToken, getRefreshToken, saveLogin } from "./storage";
+import { getApiKey, getAuthToken, getRefreshToken, saveLogin, getDeviceId } from "./storage";
 
 // ── Entity name → Supabase table name mapping ──────────────────────
 const TABLE_MAP: Record<string, string> = {
@@ -59,6 +59,11 @@ const EDGE_FUNCTION_MAP: Record<string, string> = {
   spaceInvite: "space-invite",
   spaceRemoveMember: "space-remove-member",
   spaceMessages: "space-messages",
+  spaceUpdateRole: "space-update-role",
+  spaceActivity: "space-activity",
+  spaceTasks: "space-tasks",
+  fileComments: "file-comments",
+  spaceInviteLink: "space-invite-link",
 };
 
 // ── Supabase field mapping (created_at → created_date for desktop app) ──
@@ -182,7 +187,10 @@ let _refreshPromise: Promise<string> | null = null;
 
 async function refreshSupabaseToken(): Promise<string> {
   const rt = getRefreshToken();
-  if (!rt) throw new Error("No refresh token available — please re-login");
+  if (!rt) {
+    triggerAutoLogout();
+    throw new Error("No refresh token available — please re-login");
+  }
   const url = `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`;
   const res = await fetch(url, {
     method: "POST",
@@ -191,10 +199,25 @@ async function refreshSupabaseToken(): Promise<string> {
     body: JSON.stringify({ refresh_token: rt }),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
-  if (!res.ok || !data.access_token) throw new Error("Token refresh failed — please re-login");
+  if (!res.ok || !data.access_token) {
+    triggerAutoLogout();
+    throw new Error("Token refresh failed — please re-login");
+  }
   const email = localStorage.getItem("easyvault_email") || "";
   saveLogin(data.access_token, email, data.refresh_token || rt);
   return data.access_token;
+}
+
+/** Callback for auto-logout; set by the app shell via `setAutoLogoutHandler`. */
+let _autoLogoutHandler: (() => void) | null = null;
+
+/** Register a callback to be called when token refresh fails. */
+export function setAutoLogoutHandler(handler: () => void): void {
+  _autoLogoutHandler = handler;
+}
+
+function triggerAutoLogout(): void {
+  if (_autoLogoutHandler) _autoLogoutHandler();
 }
 
 /** Refresh the JWT if expired, deduplicating concurrent calls. */
@@ -819,7 +842,7 @@ export async function checkoutFile(fileId: string, requestToken: string): Promis
     body: JSON.stringify({
       token: requestToken,
       fileId,
-      device_id: "easyvault-desktop-mac",
+      device_id: getDeviceId(),
     }),
   });
   const data = (await res.json().catch(() => ({}))) as CheckoutPayload;
