@@ -254,6 +254,28 @@ export default function SharedTab() {
     }
   }, [activeSpace, activeSpaceId, editName, editDesc, setStatus]);
 
+  // All people in the space (creator + members) — must be before early return to avoid hooks violation
+  const allMembers = useMemo(() => {
+    if (!activeSpace) return [];
+    const creator = asString(activeSpace.created_by);
+    const members: SpaceMember[] = Array.isArray(activeSpace.members) ? activeSpace.members as SpaceMember[] : [];
+    const result: { email: string; role: string }[] = [{ email: creator, role: "owner" }];
+    for (const m of members) {
+      const email = (m.email || "").toLowerCase();
+      if (email && email !== creator.toLowerCase()) {
+        result.push({ email, role: m.role || "viewer" });
+      }
+    }
+    return result;
+  }, [activeSpace]);
+
+  const sections: { id: SectionId; label: string }[] = useMemo(() => [
+    { id: "files" as SectionId, label: tr("shared.filesTab") },
+    { id: "chat" as SectionId, label: tr("shared.chatTab") },
+    { id: "members" as SectionId, label: tr("shared.membersTab") },
+    ...(isOwner ? [{ id: "settings" as SectionId, label: tr("shared.settingsTab") }] : []),
+  ], [isOwner, tr]);
+
   const enterSpace = useCallback((id: string) => {
     setActiveSpaceId(id);
     setActiveSection("files");
@@ -356,27 +378,6 @@ export default function SharedTab() {
   // ── Space Detail View ──
   const spaceName = asString(activeSpace.name, tr("shared.unnamed"));
   const spaceDesc = asString(activeSpace.description);
-  const members: SpaceMember[] = Array.isArray(activeSpace.members) ? activeSpace.members as SpaceMember[] : [];
-  const creator = asString(activeSpace.created_by);
-
-  // All people in the space (creator + members)
-  const allMembers: { email: string; role: string }[] = useMemo(() => {
-    const result: { email: string; role: string }[] = [{ email: creator, role: "owner" }];
-    for (const m of members) {
-      const email = (m.email || "").toLowerCase();
-      if (email && email !== creator.toLowerCase()) {
-        result.push({ email, role: m.role || "viewer" });
-      }
-    }
-    return result;
-  }, [creator, members]);
-
-  const sections: { id: SectionId; label: string }[] = [
-    { id: "files", label: tr("shared.filesTab") },
-    { id: "chat", label: tr("shared.chatTab") },
-    { id: "members", label: tr("shared.membersTab") },
-    ...(isOwner ? [{ id: "settings" as SectionId, label: tr("shared.settingsTab") }] : []),
-  ];
 
   return (
     <section className="tab-panel" style={{ padding: "20px 28px 28px" }}>

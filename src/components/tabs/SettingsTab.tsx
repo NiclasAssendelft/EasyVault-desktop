@@ -20,7 +20,7 @@ export default function SettingsTab() {
   const setStatus = useUiStore((s) => s.setStatus);
   const tr = useT();
 
-  const [apiKey, setApiKey] = useState(() => getApiKey());
+  const [apiKey] = useState(() => getApiKey());
   const [extensionToken, setExtensionToken] = useState(() => getExtensionToken() || "");
   const [watchPath, setWatchPath] = useState(() => getWatchFolder());
   const [watchOn, setWatchOn] = useState(() => getWatchEnabled());
@@ -131,9 +131,6 @@ export default function SettingsTab() {
       <div className="dash-card">
         <h4>{tr("settings.title")}</h4>
         <form className="form" onSubmit={handleSave}>
-          <label>{tr("settings.apiKeyLabel")}</label>
-          <input type="text" placeholder={tr("settings.apiKeyPlaceholder")} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-
           <label>{tr("settings.extensionTokenLabel")}</label>
           <input type="text" placeholder={tr("settings.extensionTokenPlaceholder")} value={extensionToken} onChange={(e) => setExtensionToken(e.target.value)} />
 
