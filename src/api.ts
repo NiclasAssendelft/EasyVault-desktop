@@ -635,10 +635,11 @@ export async function entityCreate<T = Record<string, unknown>>(
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
-      // Add created_by from token email (service will handle via RLS)
-      const email = localStorage.getItem("easyvault_email") || "";
       const freshToken = token || await ensureFreshToken();
-      const payload = { ...data, created_by: email };
+      // Add created_by for tables that have the column
+      const noCreatedBy = new Set(["space_members", "item_tags"]);
+      const email = localStorage.getItem("easyvault_email") || "";
+      const payload = noCreatedBy.has(table) ? { ...data } : { ...data, created_by: email };
       const url = `${SUPABASE_URL}/rest/v1/${table}`;
       const res = await tauriFetch(url, {
         method: "POST",
