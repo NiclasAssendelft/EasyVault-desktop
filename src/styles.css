@@ -100,6 +100,16 @@ h1 {
   overflow: auto;
 }
 
+.shell-sidebar::before {
+  content: "";
+  display: block;
+  height: 2px;
+  margin: 0 12px 0;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  opacity: 0.35;
+}
+
 .brand-row {
   display: flex;
   align-items: center;
@@ -192,6 +202,7 @@ h1 {
   border-color: transparent;
   background: #12213f;
   color: var(--blue);
+  animation: nav-glow 3s ease-in-out infinite;
 }
 
 .shell-main {
@@ -327,6 +338,7 @@ h1 {
   overflow: auto;
   overflow-x: hidden;
   padding: 20px 28px 28px;
+  animation: fade-in-up 0.2s ease-out;
 }
 
 .home-hero {
@@ -933,6 +945,49 @@ select {
   line-height: 1;
 }
 
+.folder-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1e3a5f 0%, #12213f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  border: 1px solid rgba(96, 165, 250, 0.15);
+  transition: border-color 0.15s ease;
+}
+
+.folder-card:hover .folder-icon-box {
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.folder-card.folder-pinned {
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+.folder-card-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.folder-card-name {
+  margin: 0;
+  color: #f4f4f5;
+  font-size: 14px;
+  font-weight: 520;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-card-sub {
+  margin: 2px 0 0;
+  color: #71717a;
+  font-size: 12px;
+}
+
 .folder-name {
   color: #f4f4f5;
   font-size: 14px;
@@ -1031,11 +1086,42 @@ select {
   display: flex;
   gap: 12px;
   align-items: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
-.file-row-icon {
-  color: #a1a1aa;
-  font-size: 16px;
+.file-row:hover {
+  border-color: var(--line-2);
+  background: #141420;
+  transform: translateY(-1px);
+}
+
+.file-icon-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.file-type-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: #fff;
+  letter-spacing: 0.04em;
 }
 
 .file-row-body {
@@ -1048,12 +1134,57 @@ select {
   color: #f4f4f5;
   font-size: 15px;
   font-weight: 520;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .file-row-sub {
-  margin: 2px 0 0;
+  margin: 0;
   color: #71717a;
   font-size: 12px;
+}
+
+.file-ext-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.file-pin-badge {
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.file-fav-star {
+  color: #eab308;
+  font-size: 13px;
+}
+
+.file-uploading-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #60a5fa;
+  animation: pulse-dot 1.4s ease-in-out infinite;
 }
 
 .row-menu {
@@ -1329,6 +1460,8 @@ button:disabled {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .modal-panel {
@@ -2535,4 +2668,177 @@ button:disabled {
   .email-layout.detail-open .email-detail-back {
     display: block;
   }
+}
+
+/* ── Calendar Enhancements ── */
+
+.calendar-sync-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-event-chip {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  cursor: default;
+}
+
+.calendar-event-chip.outlook {
+  background: rgba(0, 120, 212, 0.15);
+  color: #60a5fa;
+}
+
+.calendar-event-chip.manual {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.week-day-cell {
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-provider-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calendar-provider-badge.outlook {
+  background: rgba(0, 120, 212, 0.15);
+  color: #60a5fa;
+}
+
+.calendar-provider-badge.manual {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.calendar-create-modal {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: #111118;
+  display: grid;
+  gap: 10px;
+}
+
+.calendar-create-modal label {
+  font-size: 12px;
+  color: #a1a1aa;
+  font-weight: 540;
+}
+
+.calendar-create-modal input {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: #0d0d14;
+  color: var(--text);
+  font-size: 14px;
+  padding: 10px;
+}
+
+.calendar-create-modal .cal-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ── Home Dashboard Cards ── */
+
+.home-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.home-card-clickable {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.home-card-clickable:hover {
+  border-color: var(--line-2);
+  background: #141420;
+  transform: translateY(-1px);
+}
+
+.home-card-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.home-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 580;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.home-card-stat {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.home-card-detail {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #52525b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.home-quick-actions button {
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+/* ─── Keyframe animations ─── */
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes nav-glow {
+  0%, 100% { box-shadow: none; }
+  50%      { box-shadow: inset 0 0 12px rgba(96, 165, 250, 0.06); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
 }
