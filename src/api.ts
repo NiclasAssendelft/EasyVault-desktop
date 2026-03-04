@@ -786,6 +786,42 @@ export async function entityDelete(entityName: string, id: string, token?: strin
   await requestJsonCandidates<unknown>(candidates, token);
 }
 
+// ── Signup ──────────────────────────────────────────────────────────
+
+export async function signup(email: string, password: string): Promise<string> {
+  const url = `${SUPABASE_URL}/auth/v1/signup`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "omit",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    access_token?: string;
+    refresh_token?: string;
+    id?: string;
+    identities?: unknown[];
+  };
+  if (!res.ok) {
+    const msg = (data as Record<string, unknown>).msg || (data as Record<string, unknown>).error_description || (data as Record<string, unknown>).error || "Signup failed";
+    throw new Error(String(msg));
+  }
+  // Supabase returns empty identities if user already exists (email confirmation disabled)
+  if (data.identities && Array.isArray(data.identities) && data.identities.length === 0) {
+    throw new Error("An account with this email already exists");
+  }
+  if (!data.access_token) {
+    throw new Error("Account created — please check your email to confirm, then sign in");
+  }
+  if (data.refresh_token) {
+    localStorage.setItem("easyvault_refresh_token", data.refresh_token);
+  }
+  return data.access_token;
+}
+
 // ── Login ───────────────────────────────────────────────────────────
 
 export async function login(email: string, password: string): Promise<string> {

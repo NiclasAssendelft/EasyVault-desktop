@@ -7,9 +7,22 @@ const en = {
   "login.emailPlaceholder": "you@example.com",
   "login.passwordLabel": "Password",
   "login.submit": "Log in",
-  "login.loggingIn": "logging in...",
-  "login.success": "login success",
-  "login.networkError": "network/error",
+  "login.loggingIn": "Signing in...",
+  "login.success": "Signed in!",
+  "login.networkError": "Login failed — check your email and password",
+  "login.tabLogin": "Sign in",
+  "login.tabSignup": "Create account",
+
+  // Signup
+  "signup.heading": "Create account",
+  "signup.subtitle": "Get started with EasyVault — it's free.",
+  "signup.confirmLabel": "Confirm password",
+  "signup.submit": "Create account",
+  "signup.creatingAccount": "Creating account...",
+  "signup.success": "Account created!",
+  "signup.alreadyExists": "An account with this email already exists — try signing in",
+  "signup.passwordMismatch": "Passwords don't match",
+  "signup.passwordTooShort": "Password must be at least 6 characters",
 
   // Sidebar
   "nav.home": "Home",

@@ -125,7 +125,11 @@
       "Bash(grep -r \"updater\\\\|update\\\\|sign\\\\|notarize\\\\|dmg\\\\|msi\\\\|appimage\" /Users/Niclas/Documents/EasyVault-desktop/*.md)",
       "Bash(chmod +x /Users/Niclas/Documents/EasyVault-desktop/install.sh)",
       "Bash(git add package.json src/components/Sidebar.tsx src/components/WorkspaceLayout.tsx src/components/lists/FolderCard.tsx src/components/lists/ItemRow.tsx src/components/modals/FileActionModal.tsx src/editors/pdf.native.bridge.ts src/services/capabilitiesService.ts src/services/deltaSyncService.ts src/services/fileOps.ts src/services/onlyofficeService.ts src/services/queueService.ts src/styles.css .github/workflows/release.yml install.sh scripts/release.mjs src/assets/ .claude/settings.json)",
-      "WebFetch(domain:qtrypzzcjebvfcihiynt.supabase.co)"
+      "WebFetch(domain:qtrypzzcjebvfcihiynt.supabase.co)",
+      "Bash(git add src/assets/)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(gh auth refresh -s workflow)",
+      "Bash(git add src/api.ts src/components/LoginScreen.tsx src/stores/authStore.ts src/i18n/en.ts src/i18n/sv.ts src/i18n/fi.ts src/styles.css .claude/settings.json src/assets/logo.png src/components/tabs/CalendarTab.tsx)"
     ],
     "additionalDirectories": [
       "/Users/Niclas/Documents/easyvault-backend/legacy",
@@ -138,7 +142,8 @@
       "/tmp/easyvault-backend-tmp/supabase/functions/space-invite",
       "/tmp/easyvault-backend-tmp/supabase/functions/space-remove-member",
       "/tmp/easyvault-backend-tmp/supabase/functions/space-messages",
-      "/Users/Niclas/.claude"
+      "/Users/Niclas/.claude",
+      "/Users/Niclas/Downloads"
     ]
   }
 }

@@ -60,6 +60,33 @@ body {
   padding: 24px;
 }
 
+.auth-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.auth-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.auth-tab:not(.active):hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .eyebrow {
   margin: 0;
   color: #a1a1aa;
@@ -114,12 +141,14 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 0 12px;
+  margin-bottom: -8px;
 }
 
 .brand-logo {
-  height: 54px;
+  height: auto;
   width: 100%;
+  max-width: 150px;
   object-fit: contain;
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
 }

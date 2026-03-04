@@ -1,6 +1,20 @@
 import { create } from "zustand";
-import { login as apiLogin } from "../api";
-import { getAuthToken, getSavedEmail, saveLogin, clearLogin } from "../storage";
+import { login as apiLogin, signup as apiSignup, invokeBase44Function } from "../api";
+import { getAuthToken, getSavedEmail, saveLogin, clearLogin, getExtensionToken, saveSettings } from "../storage";
+
+async function ensureExtensionToken(accessToken: string): Promise<void> {
+  if (getExtensionToken()) return;
+  try {
+    const res = await invokeBase44Function<{ token?: string }>(
+      "extensionAuth",
+      { action: "create" },
+      accessToken,
+    );
+    if (res.token) {
+      saveSettings("", res.token);
+    }
+  } catch { /* non-critical — user can set it manually later */ }
+}
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -8,6 +22,7 @@ interface AuthState {
   accessibleSpaceIds: string[];
   personalSpaceId: string;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setAccessScope: (spaceIds: string[], personalId: string) => void;
   checkLoggedIn: () => void;
@@ -22,6 +37,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     const accessToken = await apiLogin(email, password);
     saveLogin(accessToken, email);
     set({ isLoggedIn: true, email });
+    ensureExtensionToken(accessToken);
+  },
+  signup: async (email, password) => {
+    const accessToken = await apiSignup(email, password);
+    saveLogin(accessToken, email);
+    set({ isLoggedIn: true, email });
+    ensureExtensionToken(accessToken);
   },
   logout: () => {
     clearLogin();

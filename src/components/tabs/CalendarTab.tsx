@@ -125,6 +125,7 @@ export default function CalendarTab() {
       setNewTitle("");
       await refreshCalendarFromRemote();
     } catch (err) {
+      console.error("[CalendarTab] create event failed:", err);
       setStatus(t("calendar.createFailed", { error: String(err) }));
     }
   }, [newTitle, newDate, newStart, newEnd, setStatus]);
