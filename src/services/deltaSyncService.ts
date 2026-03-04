@@ -450,6 +450,7 @@ export async function syncRemoteDelta(): Promise<void> {
         for (const row of spaceChanges.updated) {
           const id = asString(row.id);
           if (!id || !spaceAllowed(id)) continue;
+          if (asString(row.space_type) !== "shared") continue;
           const idx = spaces.findIndex((s) => asString(s.id) === id);
           if (idx >= 0) spaces[idx] = row;
           else spaces.unshift(row);
