@@ -47,6 +47,14 @@ const EDGE_FUNCTION_MAP: Record<string, string> = {
   extensionUploadInit: "upload-init",
   extensionUploadChunk: "upload-chunk",
   extensionUploadComplete: "upload-complete",
+  onlyofficeEditorSession: "onlyoffice-editor-session",
+  onlyofficeCallback: "onlyoffice-callback",
+  onlyofficeCommit: "onlyoffice-commit",
+  gatherRelated: "gather-related",
+  suggestTags: "suggest-tags",
+  syncGmail: "sync-gmail",
+  syncOutlookEmails: "sync-outlook-emails",
+  syncOutlookCalendar: "sync-outlook-calendar",
 };
 
 // ── Supabase field mapping (created_at → created_date for desktop app) ──
