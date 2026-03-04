@@ -32,13 +32,21 @@ export function saveSettings(apiKey: string, extensionToken: string): void {
   }
 }
 
-export function saveLogin(accessToken: string, email: string): void {
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.refreshToken);
+}
+
+export function saveLogin(accessToken: string, email: string, refreshToken?: string): void {
   localStorage.setItem(STORAGE_KEYS.authToken, accessToken);
   localStorage.setItem(STORAGE_KEYS.email, email);
+  if (refreshToken) {
+    localStorage.setItem(STORAGE_KEYS.refreshToken, refreshToken);
+  }
 }
 
 export function clearLogin(): void {
   localStorage.removeItem(STORAGE_KEYS.authToken);
+  localStorage.removeItem(STORAGE_KEYS.refreshToken);
 }
 
 export function getWatchEnabled(): boolean {

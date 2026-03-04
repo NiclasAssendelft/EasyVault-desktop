@@ -31,6 +31,7 @@ export const STORAGE_KEYS = {
   onlyofficeServerUrl: "easyvault_onlyoffice_server_url",
   locale: "easyvault_locale",
   emailSyncCount: "easyvault_email_sync_count",
+  refreshToken: "easyvault_refresh_token",
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";

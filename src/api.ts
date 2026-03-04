@@ -15,7 +15,7 @@ import {
 } from "./config";
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
-import { getApiKey, getAuthToken } from "./storage";
+import { getApiKey, getAuthToken, getRefreshToken, saveLogin } from "./storage";
 
 // ── Entity name → Supabase table name mapping ──────────────────────
 const TABLE_MAP: Record<string, string> = {
@@ -175,6 +175,43 @@ function supabaseRestHeaders(token?: string): Record<string, string> {
     ...supabaseHeaders(token),
     Prefer: "return=representation",
   };
+}
+
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshSupabaseToken(): Promise<string> {
+  const rt = getRefreshToken();
+  if (!rt) throw new Error("No refresh token available — please re-login");
+  const url = `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "omit",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+    body: JSON.stringify({ refresh_token: rt }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
+  if (!res.ok || !data.access_token) throw new Error("Token refresh failed — please re-login");
+  const email = localStorage.getItem("easyvault_email") || "";
+  saveLogin(data.access_token, email, data.refresh_token || rt);
+  return data.access_token;
+}
+
+/** Refresh the JWT if expired, deduplicating concurrent calls. */
+export async function ensureFreshToken(): Promise<string> {
+  const token = getAuthToken();
+  if (token) {
+    // Check if JWT is expired by decoding payload
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload.exp && payload.exp * 1000 > Date.now() + 30000) {
+        return token; // Still valid (with 30s buffer)
+      }
+    } catch { /* fall through to refresh */ }
+  }
+  if (!_refreshPromise) {
+    _refreshPromise = refreshSupabaseToken().finally(() => { _refreshPromise = null; });
+  }
+  return _refreshPromise;
 }
 
 function withAuthToken(explicitToken?: string): string {
@@ -459,11 +496,12 @@ export async function entityList<T = Record<string, unknown>>(
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
+      const freshToken = token || await ensureFreshToken();
       const order = sortToPostgrest(sort);
       const url = `${SUPABASE_URL}/rest/v1/${table}?order=${order}&limit=${limit}&select=*`;
       const res = await tauriFetch(url, {
         method: "GET",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
       });
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(`entityList ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
@@ -511,13 +549,14 @@ export async function entityFilter<T = Record<string, unknown>>(
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
+      const freshToken = token || await ensureFreshToken();
       const order = sortToPostgrest(sort);
       const filterParams = filtersToPostgrest(filters);
       const sep = filterParams ? "&" : "";
       const url = `${SUPABASE_URL}/rest/v1/${table}?order=${order}&limit=${limit}&select=*${sep}${filterParams}`;
       const res = await tauriFetch(url, {
         method: "GET",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
       });
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(`entityFilter ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
@@ -564,10 +603,11 @@ export async function entityGet<T = Record<string, unknown>>(entityName: string,
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
+      const freshToken = token || await ensureFreshToken();
       const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}&select=*`;
       const res = await tauriFetch(url, {
         method: "GET",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
       });
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(`entityGet ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
@@ -596,11 +636,12 @@ export async function entityCreate<T = Record<string, unknown>>(
     if (table) {
       // Add created_by from token email (service will handle via RLS)
       const email = localStorage.getItem("easyvault_email") || "";
+      const freshToken = token || await ensureFreshToken();
       const payload = { ...data, created_by: email };
       const url = `${SUPABASE_URL}/rest/v1/${table}`;
       const res = await tauriFetch(url, {
         method: "POST",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
         body: JSON.stringify(payload),
       });
       const result = await res.json().catch(() => ({}));
@@ -631,10 +672,11 @@ export async function entityUpdate<T = Record<string, unknown>>(
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
+      const freshToken = token || await ensureFreshToken();
       const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
       const res = await tauriFetch(url, {
         method: "PATCH",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
         body: JSON.stringify(data),
       });
       const result = await res.json().catch(() => ({}));
@@ -661,10 +703,11 @@ export async function entityDelete(entityName: string, id: string, token?: strin
   if (BACKEND === "supabase") {
     const table = TABLE_MAP[entityName];
     if (table) {
+      const freshToken = token || await ensureFreshToken();
       const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
       const res = await tauriFetch(url, {
         method: "DELETE",
-        headers: supabaseRestHeaders(withAuthToken(token)),
+        headers: supabaseRestHeaders(freshToken),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -732,9 +775,13 @@ export async function login(email: string, password: string): Promise<string> {
       },
       body: JSON.stringify({ email, password }),
     });
-    const data = (await res.json().catch(() => ({}))) as { access_token?: string };
+    const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
     if (!res.ok || !data.access_token) {
       throw new Error(`login failed (${res.status})`);
+    }
+    // Store refresh token for auto-refresh
+    if (data.refresh_token) {
+      localStorage.setItem("easyvault_refresh_token", data.refresh_token);
     }
     return data.access_token;
   }
