@@ -4,7 +4,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { asString, toDisplayName } from "../../services/helpers";
 import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService";
-import { entityCreate } from "../../api";
+import { entityCreate, entityDelete } from "../../api";
 import { refreshSharedFromRemote, refreshAccessScope } from "../../services/deltaSyncService";
 import { invokeBase44Function } from "../../api";
 import { getSavedEmail } from "../../storage";
@@ -96,6 +96,9 @@ export default function SharedTab() {
   // Settings edit
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+
+  // Card menu
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const me = currentUserEmail();
 
@@ -254,6 +257,20 @@ export default function SharedTab() {
     }
   }, [activeSpace, activeSpaceId, editName, editDesc, setStatus]);
 
+  const handleDeleteSpace = useCallback(async (spaceId: string) => {
+    if (!confirm(tr("shared.deleteConfirm"))) return;
+    try {
+      await entityDelete("Space", spaceId);
+      setStatus(t("shared.deleted"));
+      setActiveSpaceId(null);
+      setMenuOpenId(null);
+      await refreshAccessScope();
+      await refreshSharedFromRemote();
+    } catch (err) {
+      setStatus(t("shared.createFailed", { error: String(err) }));
+    }
+  }, [setStatus, tr]);
+
   // All people in the space (creator + members) — must be before early return to avoid hooks violation
   const allMembers = useMemo(() => {
     if (!activeSpace) return [];
@@ -311,7 +328,23 @@ export default function SharedTab() {
 
               return (
                 <div key={id} className="space-card" onClick={() => enterSpace(id)}>
-                  <h3 className="space-card-name">{name}</h3>
+                  <div className="space-card-header">
+                    <h3 className="space-card-name">{name}</h3>
+                    <button
+                      type="button"
+                      className="space-card-menu-btn"
+                      onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === id ? null : id); }}
+                    >
+                      &#x22EE;
+                    </button>
+                    {menuOpenId === id && (
+                      <div className="space-card-menu">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteSpace(id); }}>
+                          {tr("shared.deleteSpace")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {desc && <p className="space-card-desc">{desc}</p>}
                   <div className="space-card-footer">
                     <div className="space-card-avatars">

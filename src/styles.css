@@ -1921,6 +1921,13 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.space-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+}
+
 .space-card-name {
   margin: 0;
   color: #fff;
@@ -1928,6 +1935,45 @@ button:disabled {
   font-weight: 580;
   letter-spacing: -0.02em;
 }
+
+.space-card-menu-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.space-card-menu-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+.space-card-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  background: #1e1e2e;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 10;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.space-card-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #f87171;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.space-card-menu button:hover { background: rgba(248,113,113,0.1); }
 
 .space-card-desc {
   margin: 6px 0 0;

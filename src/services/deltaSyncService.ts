@@ -295,6 +295,7 @@ export async function refreshEntitySchemas(): Promise<void> {
 }
 
 export async function refreshAllRemoteData(): Promise<void> {
+  await refreshAccessScope();
   await Promise.all([
     refreshFilesFromRemote(),
     refreshEmailFromRemote(),
