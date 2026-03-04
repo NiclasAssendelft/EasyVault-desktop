@@ -88,7 +88,6 @@ export default function HomeTab() {
     <section className="tab-panel">
       <div className="home-hero">
         <h1>{t("home.greeting")}</h1>
-        <p>{t("home.subtitle")}</p>
       </div>
 
       {/* ── Navigation cards row ── */}
