@@ -31,38 +31,40 @@ export default function FilesTab() {
 
   const activeFolder = folders.find((f) => f.id === activeFolderId);
 
+  const fileItems = useMemo(() => items.filter((i) => i.itemType !== "link"), [items]);
+
   const recentItems = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7);
-    return items.filter((i) => {
+    return fileItems.filter((i) => {
       const d = i.openedAt || i.createdAtIso;
       return d && d >= cutoff.toISOString();
     });
-  }, [items]);
+  }, [fileItems]);
 
   const sharedItems = useMemo(
-    () => items.filter((i) => i.spaceId && i.spaceId !== personalSpaceId),
-    [items, personalSpaceId],
+    () => fileItems.filter((i) => i.spaceId && i.spaceId !== personalSpaceId),
+    [fileItems, personalSpaceId],
   );
 
-  const pinnedItems = useMemo(() => items.filter((i) => i.isPinned), [items]);
+  const pinnedItems = useMemo(() => fileItems.filter((i) => i.isPinned), [fileItems]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    for (const i of items) for (const tag of i.tags) set.add(tag);
+    for (const i of fileItems) for (const tag of i.tags) set.add(tag);
     return [...set].sort();
-  }, [items]);
+  }, [fileItems]);
 
   const visibleItems = useMemo(() => {
     let base = activeFolderId
-      ? items.filter((i) => i.folderId === activeFolderId)
+      ? fileItems.filter((i) => i.folderId === activeFolderId)
       : categoryFilter === "recent"
         ? recentItems
         : categoryFilter === "shared"
           ? sharedItems
           : categoryFilter === "pinned"
             ? pinnedItems
-            : items;
+            : fileItems;
     if (selectedTags.size > 0) {
       base = base.filter((i) => [...selectedTags].every((tag) => i.tags.includes(tag)));
     }
@@ -195,7 +197,7 @@ export default function FilesTab() {
             </div>
           </>
         )}
-        <h4 className="section-label">{t("files.filesAndItems")}</h4>
+        <h4 className="section-label">{t("files.files")}</h4>
         <div className="files-items">
           {visibleItems.length === 0 ? (
             <div className="dash-card"><p>{t("files.noItems")}</p></div>

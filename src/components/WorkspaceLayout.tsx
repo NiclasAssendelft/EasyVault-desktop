@@ -104,6 +104,7 @@ export default function WorkspaceLayout() {
   const activeTab = useUiStore((s) => s.activeTab);
 
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
+  const statusText = useUiStore((s) => s.statusText);
   const queueItems = useQueueStore((s) => s.items);
   const t = useT();
   const locale = useLocaleStore((s) => s.locale);
@@ -161,16 +162,17 @@ export default function WorkspaceLayout() {
     <section className="workspace-screen">
       <Sidebar />
       <section className="shell-main">
-        <div className="top-title">{t("header.title")}</div>
         <header className="shell-header">
           <div className="search-shell">
-            <span className="search-icon">&#x2315;</span>
-            <span>{t("header.search")}</span>
-            <kbd>&#x2318;K</kbd>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+            <span className="search-placeholder">{t("header.search")}</span>
           </div>
           <LocaleDropdown locale={locale} setLocale={setLocale} />
         </header>
         <ActiveTabComponent />
+        {statusText && statusText !== "idle" && (
+          <div className="status-bar">{statusText}</div>
+        )}
       </section>
       <NewModal />
       <ManageModal />

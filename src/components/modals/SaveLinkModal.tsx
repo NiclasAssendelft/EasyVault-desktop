@@ -8,7 +8,7 @@ import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService
 import { normalizeItem, asString } from "../../services/helpers";
 import { useT } from "../../i18n";
 
-type StatusOption = "status:unread" | "status:reference" | "status:done" | "";
+type StatusOption = "status:unread" | "status:read" | "";
 
 function extractDomain(rawUrl: string): string {
   try { return new URL(rawUrl).hostname.replace(/^www\./, ""); } catch { return ""; }
@@ -101,7 +101,7 @@ export default function SaveLinkModal() {
       } else {
         const result = await safeEntityCreate<Record<string, unknown>>("VaultItem", {
           title, item_type: "link", notes: trimDesc, source_url: trimUrl,
-          tags: finalTags, space_id: spaceId, source: "desktop_manual",
+          tags: finalTags, space_id: spaceId, source: "other",
         });
         const newItem = normalizeItem({
           id: asString(result.id, crypto.randomUUID()),
@@ -166,11 +166,10 @@ export default function SaveLinkModal() {
 
           <label>{t("saveLink.statusLabel")}</label>
           <div className="save-link-pills">
-            {(["status:unread", "status:reference", "status:done", ""] as StatusOption[]).map((s) => (
+            {(["status:unread", "status:read", ""] as StatusOption[]).map((s) => (
               <button key={s} type="button" className={`save-link-pill${status === s ? " active" : ""}`} onClick={() => setStatus(s)}>
                 {s === "status:unread" ? t("saveLink.statusUnread")
-                  : s === "status:reference" ? t("saveLink.statusReference")
-                  : s === "status:done" ? t("saveLink.statusDone")
+                  : s === "status:read" ? t("saveLink.statusRead")
                   : t("saveLink.statusNone")}
               </button>
             ))}

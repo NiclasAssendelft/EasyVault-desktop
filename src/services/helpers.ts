@@ -275,7 +275,8 @@ export async function hmacSha256Base64Url(message: string, secret: string): Prom
 
 export async function signOnlyofficeConfigToken(config: Record<string, unknown>, secret: string): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
-  const payload = { ...config };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { ...config, iat: now, exp: now + 3600 };
   delete (payload as { token?: unknown }).token;
   const headerB64 = jsonBase64Url(header);
   const payloadB64 = jsonBase64Url(payload);

@@ -5,7 +5,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useT } from "../../i18n";
 import LinkRow from "../lists/LinkRow";
 
-type StatusFilter = "" | "status:unread" | "status:reference" | "status:done";
+type StatusFilter = "" | "status:unread" | "status:read";
 type LocationFilter = "all" | "personal" | "hub";
 
 export default function LinksTab() {
@@ -69,7 +69,7 @@ export default function LinksTab() {
       </div>
 
       <div className="links-filter-row">
-        {(["", "status:unread", "status:reference", "status:done"] as StatusFilter[]).map((s) => (
+        {(["", "status:unread", "status:read"] as StatusFilter[]).map((s) => (
           <button
             key={s}
             type="button"
@@ -78,8 +78,7 @@ export default function LinksTab() {
           >
             {s === "" ? t("links.filterAll")
               : s === "status:unread" ? t("links.filterUnread")
-              : s === "status:reference" ? t("links.filterReference")
-              : t("links.filterDone")}
+              : t("links.filterRead")}
           </button>
         ))}
         <span className="links-filter-divider">|</span>

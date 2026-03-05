@@ -28,6 +28,7 @@ export default function SettingsTab() {
   const [onlyofficeServerUrl, setOnlyofficeServerUrlState] = useState(() => getOnlyofficeServerUrl());
   const [emailSyncCountVal, setEmailSyncCountVal] = useState(() => getEmailSyncCount());
   const [showToken, setShowToken] = useState(false);
+  const [showJwt, setShowJwt] = useState(false);
   const [report, setReport] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
 
@@ -161,7 +162,10 @@ export default function SettingsTab() {
           )}
 
           <label>{tr("settings.onlyofficeJwtLabel")}</label>
-          <input type="password" placeholder={tr("settings.onlyofficeJwtPlaceholder")} value={onlyofficeJwt} onChange={(e) => setOnlyofficeJwt(e.target.value)} />
+          <div className="token-input-row">
+            <input type={showJwt ? "text" : "password"} placeholder={tr("settings.onlyofficeJwtPlaceholder")} value={onlyofficeJwt} onChange={(e) => setOnlyofficeJwt(e.target.value)} />
+            <button type="button" className="ghost token-toggle" onClick={() => setShowJwt(!showJwt)} title={showJwt ? "Hide" : "Show"}>{showJwt ? "\u{1F441}" : "\u25CF\u25CF\u25CF"}</button>
+          </div>
 
           <button type="submit">{tr("settings.save")}</button>
         </form>

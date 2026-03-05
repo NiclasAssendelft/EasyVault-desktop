@@ -45,7 +45,7 @@ export default function ImportLinksModal() {
           source_url: rawUrl,
           tags: ["status:unread"],
           space_id: personalSpaceId,
-          source: "desktop_import",
+          source: "other",
         });
         const newItem = normalizeItem({
           id: asString(result.id, crypto.randomUUID()),

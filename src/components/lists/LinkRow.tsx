@@ -11,8 +11,7 @@ function extractDomain(url: string): string {
 
 const STATUS_MAP: Record<string, string> = {
   "status:unread": "unread",
-  "status:reference": "reference",
-  "status:done": "done",
+  "status:read": "read",
 };
 
 export default function LinkRow({ item }: { item: DesktopItem }) {
@@ -54,9 +53,7 @@ export default function LinkRow({ item }: { item: DesktopItem }) {
           {needsDesc && <span className="link-needs-desc-badge">{t("links.needsDesc")}</span>}
           {statusLabel && (
             <span className={`link-status-badge link-status-${statusLabel}`}>
-              {statusLabel === "unread" ? t("links.filterUnread")
-                : statusLabel === "reference" ? t("links.filterReference")
-                : t("links.filterDone")}
+              {statusLabel === "unread" ? t("links.filterUnread") : t("links.filterRead")}
             </span>
           )}
         </p>
