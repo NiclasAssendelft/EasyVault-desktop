@@ -19,10 +19,13 @@ import FilesTab from "./tabs/FilesTab";
 import EmailTab from "./tabs/EmailTab";
 import CalendarTab from "./tabs/CalendarTab";
 import VaultTab from "./tabs/VaultTab";
-import SharedTab from "./tabs/SharedTab";
+import WorkspacesTab from "./tabs/workspaces/WorkspacesTab";
 import DropzoneTab from "./tabs/DropzoneTab";
+import LinksTab from "./tabs/LinksTab";
 import SettingsTab from "./tabs/SettingsTab";
 import NewModal from "./modals/NewModal";
+import SaveLinkModal from "./modals/SaveLinkModal";
+import ImportLinksModal from "./modals/ImportLinksModal";
 import ManageModal from "./modals/ManageModal";
 import DeleteModal from "./modals/DeleteModal";
 import FileActionModal from "./modals/FileActionModal";
@@ -31,20 +34,22 @@ import PreviewEditModal from "./modals/PreviewEditModal";
 const TAB_COMPONENTS = {
   home: HomeTab,
   files: FilesTab,
+  links: LinksTab,
   email: EmailTab,
   calendar: CalendarTab,
   vault: VaultTab,
-  shared: SharedTab,
+  workspaces: WorkspacesTab,
   queue: DropzoneTab,
   settings: SettingsTab,
 } as const;
 
 const TAB_REFRESH: Partial<Record<keyof typeof TAB_COMPONENTS, () => Promise<void>>> = {
   files: refreshFilesFromRemote,
+  links: refreshFilesFromRemote,
   email: refreshEmailFromRemote,
   calendar: refreshCalendarFromRemote,
   vault: refreshVaultFromRemote,
-  shared: refreshSharedFromRemote,
+  workspaces: refreshSharedFromRemote,
   queue: refreshDropzoneFromRemote,
 };
 
@@ -172,6 +177,8 @@ export default function WorkspaceLayout() {
       <DeleteModal />
       <FileActionModal />
       <PreviewEditModal />
+      <SaveLinkModal />
+      <ImportLinksModal />
     </section>
   );
 }

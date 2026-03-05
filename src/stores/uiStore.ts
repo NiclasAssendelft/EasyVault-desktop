@@ -13,6 +13,9 @@ interface UiState {
   manageTargetBaselineUpdatedAt: string;
   deleteTarget: ActionTarget | null;
   fileActionTargetId: string;
+  saveLinkModalOpen: boolean;
+  saveLinkEditTarget: string;
+  importLinksModalOpen: boolean;
   // Actions
   setActiveTab: (tab: TabName) => void;
   setStatus: (text: string) => void;
@@ -27,6 +30,10 @@ interface UiState {
   closeDeleteModal: () => void;
   setFileActionTargetId: (id: string) => void;
   closeFileActionModal: () => void;
+  openSaveLinkModal: (editItemId?: string) => void;
+  closeSaveLinkModal: () => void;
+  openImportLinksModal: () => void;
+  closeImportLinksModal: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -40,6 +47,9 @@ export const useUiStore = create<UiState>((set) => ({
   manageTargetBaselineUpdatedAt: "",
   deleteTarget: null,
   fileActionTargetId: "",
+  saveLinkModalOpen: false,
+  saveLinkEditTarget: "",
+  importLinksModalOpen: false,
   setActiveTab: (tab) => set({ activeTab: tab }),
   setStatus: (text) => set({ statusText: text }),
   setCurrentFile: (text) => set({ currentFile: text }),
@@ -53,4 +63,8 @@ export const useUiStore = create<UiState>((set) => ({
   closeDeleteModal: () => set({ deleteTarget: null }),
   setFileActionTargetId: (id) => set({ fileActionTargetId: id }),
   closeFileActionModal: () => set({ fileActionTargetId: "" }),
+  openSaveLinkModal: (editItemId = "") => set({ saveLinkModalOpen: true, saveLinkEditTarget: editItemId }),
+  closeSaveLinkModal: () => set({ saveLinkModalOpen: false, saveLinkEditTarget: "" }),
+  openImportLinksModal: () => set({ importLinksModalOpen: true }),
+  closeImportLinksModal: () => set({ importLinksModalOpen: false }),
 }));

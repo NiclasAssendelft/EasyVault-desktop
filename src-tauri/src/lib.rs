@@ -28,6 +28,48 @@ fn download_and_save_to_workspace(url: &str, file_id: &str, filename: &str) -> R
     save_file_to_workspace_inner(file_id, filename, &bytes)
 }
 
+/// Fetch a URL and extract the <title> tag from the HTML response.
+#[tauri::command]
+fn fetch_page_title(url: &str) -> Result<String, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Client error: {e}"))?;
+    let resp = client
+        .get(url)
+        .header("User-Agent", "EasyVault/1.0")
+        .send()
+        .map_err(|e| format!("Fetch failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    // Read up to 64KB to find the title
+    let body = resp.text().map_err(|e| format!("Read failed: {e}"))?;
+    let search = if body.len() > 65536 { &body[..65536] } else { &body };
+    // Simple regex-free extraction
+    if let Some(start) = search.to_lowercase().find("<title") {
+        let after = &search[start..];
+        if let Some(gt) = after.find('>') {
+            let content = &after[gt + 1..];
+            if let Some(end) = content.to_lowercase().find("</title") {
+                let title = content[..end].trim();
+                if !title.is_empty() {
+                    // Decode basic HTML entities
+                    let decoded = title
+                        .replace("&amp;", "&")
+                        .replace("&lt;", "<")
+                        .replace("&gt;", ">")
+                        .replace("&quot;", "\"")
+                        .replace("&#39;", "'")
+                        .replace("&apos;", "'");
+                    return Ok(decoded.chars().take(200).collect());
+                }
+            }
+        }
+    }
+    Err("No title found".to_string())
+}
+
 #[tauri::command]
 fn save_file_to_workspace(file_id: &str, filename: &str, bytes: Vec<u8>) -> Result<String, String> {
     save_file_to_workspace_inner(file_id, filename, &bytes)
@@ -939,6 +981,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             download_and_save_to_workspace,
+            fetch_page_title,
             save_file_to_workspace,
             get_file_stat,
             read_file_bytes,

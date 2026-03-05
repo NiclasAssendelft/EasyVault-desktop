@@ -7,10 +7,11 @@ import type { TKey } from "../i18n";
 const TABS: { name: TabName; labelKey: TKey; icon: string }[] = [
   { name: "home", labelKey: "nav.home", icon: "\u{1F3E0}" },
   { name: "files", labelKey: "nav.files", icon: "\u{1F4C1}" },
+  { name: "links", labelKey: "nav.links", icon: "\u{1F517}" },
   { name: "email", labelKey: "nav.email", icon: "\u{1F4E7}" },
   { name: "calendar", labelKey: "nav.calendar", icon: "\u{1F4C5}" },
   { name: "vault", labelKey: "nav.vault", icon: "\u{1F512}" },
-  { name: "shared", labelKey: "nav.shared", icon: "\u{1F465}" },
+  { name: "workspaces", labelKey: "nav.workspaces", icon: "\u{1F465}" },
   { name: "queue", labelKey: "nav.dropzone", icon: "\u{1F4E5}" },
   { name: "settings", labelKey: "nav.settings", icon: "\u2699\uFE0F" },
 ];

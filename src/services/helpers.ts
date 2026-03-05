@@ -62,7 +62,7 @@ export type ActionTarget =
 
 export type EntityName = ActionTarget["entity"];
 
-export type TabName = "home" | "files" | "email" | "calendar" | "vault" | "shared" | "queue" | "settings";
+export type TabName = "home" | "files" | "links" | "email" | "calendar" | "vault" | "workspaces" | "queue" | "settings";
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
