@@ -3,6 +3,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useT } from "../i18n";
 import type { TabName } from "../services/helpers";
 import type { TKey } from "../i18n";
+import logoImg from "../assets/logo.png";
 
 const TABS: { name: TabName; labelKey: TKey; icon: string }[] = [
   { name: "home", labelKey: "nav.home", icon: "\u{1F3E0}" },
@@ -28,7 +29,7 @@ export default function Sidebar() {
         <div className="brand-row">
           <img
             className="brand-logo"
-            src="/src/assets/logo.png"
+            src={logoImg}
             alt="EasyVault"
           />
           <span className="brand-name">EASYVAULT</span>

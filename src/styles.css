@@ -57,14 +57,16 @@ body {
   display: grid;
   place-items: center;
   padding: 20px;
+  background: url("/src/assets/login-bg.jpg") center / cover no-repeat;
 }
 
 .login-card {
-  width: min(460px, 100%);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
-  padding: 24px;
+  width: min(500px, 90%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(8, 10, 18, 0.82);
+  backdrop-filter: blur(12px);
+  padding: 28px 24px;
 }
 
 .auth-tabs {
@@ -245,7 +247,7 @@ h1 {
 }
 
 .shell-header {
-  border-bottom: 1px solid var(--line);
+  border-bottom: none;
   padding: 11px 20px;
   display: flex;
   align-items: center;

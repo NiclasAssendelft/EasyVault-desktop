@@ -12,12 +12,10 @@ interface Props {
 }
 
 export default function FolderCard({ folder, onClick }: Props) {
-  const items = useFilesStore((s) => s.items);
   const openManageModal = useUiStore((s) => s.openManageModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const itemCount = items.filter((i) => i.folderId === folder.id).length;
   const t = useT();
 
   useEffect(() => {
@@ -41,8 +39,6 @@ export default function FolderCard({ folder, onClick }: Props) {
           {folder.isPinned && <span className="file-pin-badge">{t("list.pinned")}</span>}
         </p>
         <p className="folder-card-sub">
-          {t("files.itemCount", { count: itemCount })}
-          {" · "}
           {formatRelativeTime(folder.createdAtIso)}
         </p>
       </div>

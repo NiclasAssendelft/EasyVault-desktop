@@ -51,7 +51,12 @@ export const useUiStore = create<UiState>((set) => ({
   saveLinkEditTarget: "",
   importLinksModalOpen: false,
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setStatus: (text) => set({ statusText: text }),
+  setStatus: (text) => {
+    set({ statusText: text });
+    if (text && text !== "idle") {
+      setTimeout(() => set({ statusText: "idle" }), 3000);
+    }
+  },
   setCurrentFile: (text) => set({ currentFile: text }),
   setLastSync: (text) => set({ lastSync: text }),
   openNewModal: () => set({ newModalOpen: true, createMode: null }),

@@ -95,46 +95,40 @@ export async function ensureOnlyofficeApi(documentServerUrl: string): Promise<vo
 
   if (store.onlyofficeApiReady && store.onlyofficeApiScriptUrl === scriptUrl) return;
 
-  await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      reject(new Error(`ONLYOFFICE API load timeout: ${scriptUrl}`));
-    }, 12000);
+  // Check if already loaded (e.g. from cache)
+  if ((window as unknown as { DocsAPI?: unknown }).DocsAPI) {
+    usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
+    return;
+  }
 
-    const existing = document.querySelector<HTMLScriptElement>(`script[data-onlyoffice-api="${scriptUrl}"]`);
-    if (existing) {
-      if ((window as unknown as { DocsAPI?: unknown }).DocsAPI) {
-        usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
-        window.clearTimeout(timer);
-        resolve();
-        return;
-      }
-      existing.addEventListener("load", () => {
-        usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
-        window.clearTimeout(timer);
-        resolve();
-      });
-      existing.addEventListener("error", () => {
-        window.clearTimeout(timer);
-        reject(new Error("Failed to load ONLYOFFICE API"));
-      });
-      return;
+  // WKWebView blocks external HTTP <script src> tags and XHR.
+  // Fetch via Rust backend (reqwest) and inject as inline script.
+  const scriptText = await invoke<string>("fetch_text", { url: scriptUrl });
+
+  // Protect Tauri globals from api.js overwrite.
+  // __TAURI_INTERNALS__ may be on the window prototype (WKWebView injection),
+  // so create a non-writable OWN property to shadow it and prevent deletion.
+  const w = window as unknown as Record<string, unknown>;
+  for (const key of ["__TAURI_INTERNALS__", "__TAURI__"] as const) {
+    const val = w[key];
+    if (val !== undefined) {
+      try {
+        Object.defineProperty(window, key, {
+          value: val, writable: false, configurable: false, enumerable: true,
+        });
+      } catch { /* already frozen */ }
     }
+  }
 
-    const script = document.createElement("script");
-    script.src = scriptUrl;
-    script.async = true;
-    script.dataset.onlyofficeApi = scriptUrl;
-    script.onload = () => {
-      usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
-      window.clearTimeout(timer);
-      resolve();
-    };
-    script.onerror = () => {
-      window.clearTimeout(timer);
-      reject(new Error(`Failed to load ONLYOFFICE API from ${scriptUrl}`));
-    };
-    document.head.appendChild(script);
-  });
+  const script = document.createElement("script");
+  script.textContent = scriptText;
+  document.head.appendChild(script);
+
+  if (!(window as unknown as { DocsAPI?: unknown }).DocsAPI) {
+    throw new Error("ONLYOFFICE API loaded but DocsAPI not found");
+  }
+
+  usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,13 +235,13 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
       usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(0);
     }
 
-    // Send the relay callback URL to the server so it can include it in the JWT-signed config
+    // Pass local relay callback URL so ONLYOFFICE calls back to the desktop
     const containerCallbackUrl = usePreviewEditStore.getState().onlyofficeRelayContainerCallbackUrl;
-
     const payload = await invokeEdgeFunction<Record<string, unknown>>("onlyofficeEditorSession", {
       fileId,
       mode: "edit",
       callbackUrl: containerCallbackUrl,
+      clientCallbackUrl: containerCallbackUrl,
     });
 
     // The server returns the FINAL config with JWT already signed — pass through as-is
@@ -262,11 +256,6 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     if (!configuredServerUrl && documentServerUrl.includes("host.docker.internal")) {
       documentServerUrl = documentServerUrl.replace("host.docker.internal", "localhost");
     }
-
-    const docObj = (serverConfig.document as Record<string, unknown> | undefined) || {};
-    console.log(`ONLYOFFICE: server = ${documentServerUrl}`);
-    console.log(`ONLYOFFICE: document URL = ${asString(docObj.url)}`);
-    console.log(`ONLYOFFICE: has token = ${!!serverConfig.token}`);
 
     await ensureOnlyofficeApi(documentServerUrl);
 
@@ -314,7 +303,6 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
       },
     };
 
-    console.log("ONLYOFFICE: creating editor with config:", JSON.stringify(serverConfig, null, 2));
     const editorInstance = new DocsAPI.DocEditor("onlyoffice-editor-host", editorConfig);
     usePreviewEditStore.getState().setOnlyofficeEditor(editorInstance);
 
