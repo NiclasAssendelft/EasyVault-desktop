@@ -153,11 +153,19 @@ h1 {
 }
 
 .brand-logo {
-  height: auto;
-  width: 100%;
-  max-width: 150px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.15));
+}
+
+.brand-name {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
 }
 
 .brand-block h2 {
@@ -1687,7 +1695,7 @@ button:disabled {
 .preview-edit-panel.office-mode {
   width: calc(100vw - 2px);
   max-width: none;
-  height: calc(100vh - 2px);
+  height: calc(100vh - 30px);
   max-height: none;
   padding: 0;
   grid-template-rows: minmax(0, 1fr);
@@ -4058,8 +4066,7 @@ button:disabled {
 }
 
 .link-status-unread    { background: rgba(96, 165, 250, 0.12); border: 1px solid rgba(96, 165, 250, 0.3); color: #60a5fa; }
-.link-status-reference { background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; }
-.link-status-done      { background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #86efac; }
+.link-status-read      { background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #86efac; }
 
 .links-search-row { margin-bottom: 10px; }
 
@@ -4166,4 +4173,12 @@ button:disabled {
   .ws-files-sidebar { display: none; }
   .ws-grid-view { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .space-template-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Status bar */
+.status-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--accent, #6c5ce7); color: #fff;
+  font-size: 12px; padding: 4px 12px; z-index: 2147483647;
+  font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
