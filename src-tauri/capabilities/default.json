@@ -25,8 +25,10 @@
         { "url": "https://*.base44.app/*" },
         { "url": "https://base44.app/*" },
         { "url": "https://*.base44.com/*" },
-        { "url": "https://base44.com/*" }
-      ]      
+        { "url": "https://base44.com/*" },
+        { "url": "http://89.167.67.171:*" },
+        { "url": "http://localhost:*" }
+      ]
     }
   ]
   }

@@ -405,6 +405,19 @@ fn get_onlyoffice_relay_stats() -> OnlyofficeRelayStats {
     }
 }
 
+#[tauri::command]
+fn fetch_text(url: String) -> Result<String, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.text().map_err(|e| e.to_string())
+}
+
 fn extract_upload_id(payload: &serde_json::Value) -> Option<String> {
     payload
         .get("upload_id")
@@ -989,7 +1002,8 @@ pub fn run() {
             list_folder_files,
             get_onlyoffice_relay_info,
             get_onlyoffice_relay_stats,
-            set_onlyoffice_relay_auth
+            set_onlyoffice_relay_auth,
+            fetch_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
