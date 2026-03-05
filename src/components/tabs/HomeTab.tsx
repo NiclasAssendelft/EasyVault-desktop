@@ -79,7 +79,7 @@ export default function HomeTab() {
       .slice(0, 8);
   }, [emails]);
 
-  const goTo = useCallback((tab: "files" | "email" | "calendar" | "shared" | "vault" | "queue") => {
+  const goTo = useCallback((tab: "files" | "email" | "calendar" | "workspaces" | "vault" | "queue") => {
     setActiveTab(tab);
   }, [setActiveTab]);
 
@@ -106,7 +106,7 @@ export default function HomeTab() {
           <span className="home-nav-label">{t("home.calendar")}</span>
           <span className="home-nav-count">{events.length}</span>
         </div>
-        <div className="home-nav-card" onClick={() => goTo("shared")}>
+        <div className="home-nav-card" onClick={() => goTo("workspaces")}>
           <span className="home-nav-icon">{"\uD83D\uDC65"}</span>
           <span className="home-nav-label">{t("home.spaces")}</span>
           <span className="home-nav-count">{spaces.length}</span>

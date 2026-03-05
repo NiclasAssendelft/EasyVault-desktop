@@ -1,10 +1,13 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
+import { useAuthStore } from "../../stores/authStore";
 import { uploadSelectedFilesToFolder } from "../../services/fileOps";
 import { useT } from "../../i18n";
 import FolderCard from "../lists/FolderCard";
 import ItemRow from "../lists/ItemRow";
+
+type CategoryFilter = "all" | "recent" | "shared" | "pinned";
 
 function sortByRecentlyOpened<T extends { openedAt?: string; createdAtIso: string }>(a: T, b: T): number {
   const aTime = a.openedAt || "";
@@ -21,15 +24,50 @@ export default function FilesTab() {
   const activeFolderId = useFilesStore((s) => s.activeFolderId);
   const setActiveFolderId = useFilesStore((s) => s.setActiveFolderId);
   const openNewModal = useUiStore((s) => s.openNewModal);
+  const personalSpaceId = useAuthStore((s) => s.personalSpaceId);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const t = useT();
 
   const activeFolder = folders.find((f) => f.id === activeFolderId);
+
+  const recentItems = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    return items.filter((i) => {
+      const d = i.openedAt || i.createdAtIso;
+      return d && d >= cutoff.toISOString();
+    });
+  }, [items]);
+
+  const sharedItems = useMemo(
+    () => items.filter((i) => i.spaceId && i.spaceId !== personalSpaceId),
+    [items, personalSpaceId],
+  );
+
+  const pinnedItems = useMemo(() => items.filter((i) => i.isPinned), [items]);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of items) for (const tag of i.tags) set.add(tag);
+    return [...set].sort();
+  }, [items]);
+
   const visibleItems = useMemo(() => {
-    const filtered = activeFolderId
+    let base = activeFolderId
       ? items.filter((i) => i.folderId === activeFolderId)
-      : items;
-    return [...filtered].sort(sortByRecentlyOpened);
-  }, [items, activeFolderId]);
+      : categoryFilter === "recent"
+        ? recentItems
+        : categoryFilter === "shared"
+          ? sharedItems
+          : categoryFilter === "pinned"
+            ? pinnedItems
+            : items;
+    if (selectedTags.size > 0) {
+      base = base.filter((i) => [...selectedTags].every((tag) => i.tags.includes(tag)));
+    }
+    return [...base].sort(sortByRecentlyOpened);
+  }, [items, activeFolderId, categoryFilter, recentItems, sharedItems, pinnedItems, selectedTags]);
 
   const handleUpload = useCallback(() => {
     void uploadSelectedFilesToFolder(activeFolderId || "");
@@ -76,28 +114,93 @@ export default function FilesTab() {
           <button type="button" onClick={openNewModal}>{t("files.new")}</button>
         </div>
       </div>
-      <div>
-        <h4 className="section-label">{t("files.folders")}</h4>
-        <div className="files-folders">
-          {folders.length === 0 ? (
-            <div className="dash-card"><p>{t("files.noFolders")}</p></div>
-          ) : (
-            folders.map((folder) => (
-              <FolderCard
-                key={folder.id}
-                folder={folder}
-                onClick={() => setActiveFolderId(folder.id)}
-              />
-            ))
+      <div className="files-category-cards">
+        <button
+          type="button"
+          className={`files-category-card cat-recent${categoryFilter === "recent" ? " active" : ""}`}
+          onClick={() => setCategoryFilter(categoryFilter === "recent" ? "all" : "recent")}
+        >
+          <span className="cat-icon">&#128337;</span>
+          <div>
+            <div className="cat-label">{t("files.catRecent")}</div>
+            <div className="cat-count">{recentItems.length} {t("files.catItems")}</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`files-category-card cat-shared${categoryFilter === "shared" ? " active" : ""}`}
+          onClick={() => setCategoryFilter(categoryFilter === "shared" ? "all" : "shared")}
+        >
+          <span className="cat-icon">&#128101;</span>
+          <div>
+            <div className="cat-label">{t("files.catShared")}</div>
+            <div className="cat-count">{sharedItems.length} {t("files.catItems")}</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`files-category-card cat-pinned${categoryFilter === "pinned" ? " active" : ""}`}
+          onClick={() => setCategoryFilter(categoryFilter === "pinned" ? "all" : "pinned")}
+        >
+          <span className="cat-icon">{"\uD83D\uDCCC"}</span>
+          <div>
+            <div className="cat-label">{t("files.catPinned")}</div>
+            <div className="cat-count">{pinnedItems.length} {t("files.catItems")}</div>
+          </div>
+        </button>
+      </div>
+
+      {allTags.length > 0 && (
+        <div className="tag-filter-row">
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className={`tag-chip${selectedTags.has(tag) ? " active" : ""}`}
+              onClick={() => {
+                setSelectedTags((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(tag)) next.delete(tag); else next.add(tag);
+                  return next;
+                });
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+          {selectedTags.size > 0 && (
+            <button type="button" className="tag-chip tag-chip-clear" onClick={() => setSelectedTags(new Set())}>
+              {"\u2715"}
+            </button>
           )}
         </div>
+      )}
+
+      <div>
+        {categoryFilter === "all" && (
+          <>
+            <h4 className="section-label">{t("files.folders")}</h4>
+            <div className="files-folders">
+              {folders.length === 0 ? (
+                <div className="dash-card"><p>{t("files.noFolders")}</p></div>
+              ) : (
+                folders.map((folder) => (
+                  <FolderCard
+                    key={folder.id}
+                    folder={folder}
+                    onClick={() => setActiveFolderId(folder.id)}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        )}
         <h4 className="section-label">{t("files.filesAndItems")}</h4>
-        <p className="files-scope-label">{t("files.showingAll")}</p>
         <div className="files-items">
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <div className="dash-card"><p>{t("files.noItems")}</p></div>
           ) : (
-            items.map((item) => <ItemRow key={item.id} item={item} />)
+            visibleItems.map((item) => <ItemRow key={item.id} item={item} />)
           )}
         </div>
       </div>

@@ -4,7 +4,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { asString, asBool, getStartOfWeek, addDays } from "../../services/helpers";
 import { safeEntityCreate } from "../../services/entityService";
 import { refreshCalendarFromRemote } from "../../services/deltaSyncService";
-import { invokeBase44Function } from "../../api";
+import { invokeEdgeFunction } from "../../api";
 import { useT, t } from "../../i18n";
 
 function RowMenu({ onAction }: { onAction: (action: string) => void }) {
@@ -99,7 +99,7 @@ export default function CalendarTab() {
     setSyncing(true);
     try {
       setStatus(t("calendar.syncing"));
-      await invokeBase44Function("syncOutlookCalendar", {});
+      await invokeEdgeFunction("syncOutlookCalendar", {});
       await refreshCalendarFromRemote();
       setStatus(t("calendar.outlookSynced"));
     } catch (err) {

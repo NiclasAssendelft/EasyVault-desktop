@@ -114,7 +114,7 @@ const sv: Record<keyof typeof en, string> = {
   "files.catRecent": "Senaste",
   "files.catShared": "Delade",
   "files.catItems": "objekt",
-  "files.catPinned": "Fästa",
+  "files.catPinned": "\uD83D\uDCCC Fästa",
 
   // EmailTab
   "email.connectTitle": "Anslut din e-post",
@@ -407,7 +407,7 @@ const sv: Record<keyof typeof en, string> = {
   "manage.enterPlaceholder": "Ange {{label}}...",
   "manage.optionalPlaceholder": "Valfritt {{label}}...",
   "manage.tagsLabel": "Taggar (kommaseparerade)",
-  "manage.pinLabel": "Fäst detta objekt",
+  "manage.pinLabel": "\uD83D\uDCCC Fäst detta objekt",
   "manage.tagsPlaceholder": "tagg1, tagg2",
   "manage.nameRequired": "Namn krävs.",
   "manage.error": "Fel: {{error}}",
@@ -440,8 +440,8 @@ const sv: Record<keyof typeof en, string> = {
   "fileAction.openNative": "Öppna externt",
   "fileAction.editInApp": "Redigera i appen",
   "fileAction.manage": "Hantera",
-  "fileAction.pin": "Fäst",
-  "fileAction.unpin": "Lossa",
+  "fileAction.pin": "\uD83D\uDCCC Fäst",
+  "fileAction.unpin": "\uD83D\uDCCC Lossa",
 
   // PreviewEditModal
   "previewEdit.preview": "Förhandsgranskning",
@@ -475,8 +475,8 @@ const sv: Record<keyof typeof en, string> = {
 
   // Shared RowMenu
   "menu.manage": "Hantera",
-  "menu.pin": "Fäst",
-  "menu.unpin": "Lossa",
+  "menu.pin": "\uD83D\uDCCC Fäst",
+  "menu.unpin": "\uD83D\uDCCC Lossa",
   "menu.delete": "Ta bort",
 
   // Lists

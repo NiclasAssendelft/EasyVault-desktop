@@ -114,7 +114,7 @@ const en = {
   "files.catRecent": "Recent",
   "files.catShared": "Shared",
   "files.catItems": "items",
-  "files.catPinned": "Pinned",
+  "files.catPinned": "\uD83D\uDCCC Pinned",
 
   // EmailTab
   "email.connectTitle": "Connect Your Email",
@@ -407,7 +407,7 @@ const en = {
   "manage.enterPlaceholder": "Enter {{label}}...",
   "manage.optionalPlaceholder": "Optional {{label}}...",
   "manage.tagsLabel": "Tags (comma separated)",
-  "manage.pinLabel": "Pin this item",
+  "manage.pinLabel": "\uD83D\uDCCC Pin this item",
   "manage.tagsPlaceholder": "tag1, tag2",
   "manage.nameRequired": "Name is required.",
   "manage.error": "Error: {{error}}",
@@ -440,8 +440,8 @@ const en = {
   "fileAction.openNative": "Open Native",
   "fileAction.editInApp": "Edit in App",
   "fileAction.manage": "Manage",
-  "fileAction.pin": "Pin",
-  "fileAction.unpin": "Unpin",
+  "fileAction.pin": "\uD83D\uDCCC Pin",
+  "fileAction.unpin": "\uD83D\uDCCC Unpin",
 
   // PreviewEditModal
   "previewEdit.preview": "Preview",
@@ -475,8 +475,8 @@ const en = {
 
   // Shared RowMenu
   "menu.manage": "Manage",
-  "menu.pin": "Pin",
-  "menu.unpin": "Unpin",
+  "menu.pin": "\uD83D\uDCCC Pin",
+  "menu.unpin": "\uD83D\uDCCC Unpin",
   "menu.delete": "Delete",
 
   // Lists

@@ -1,7 +1,9 @@
+import { useState, useEffect, useRef } from "react";
 import type { DesktopItem } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
-import { useUiStore } from "../../stores/uiStore";
 import { useFilesStore } from "../../stores/filesStore";
+import { useUiStore } from "../../stores/uiStore";
+import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
 
 interface Props {
@@ -67,11 +69,22 @@ function fileExtLabel(item: DesktopItem): string | null {
 
 export default function ItemRow({ item }: Props) {
   const setFileActionTargetId = useUiStore((s) => s.setFileActionTargetId);
-  const folders = useFilesStore((s) => s.folders);
-  const folder = folders.find((f) => f.id === item.folderId);
+  const openManageModal = useUiStore((s) => s.openManageModal);
+  const openDeleteModal = useUiStore((s) => s.openDeleteModal);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const cfg = getIconConfig(item);
   const extLabel = fileExtLabel(item);
   const t = useT();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   return (
     <article className="file-row group" onClick={() => setFileActionTargetId(item.id)}>
@@ -87,12 +100,28 @@ export default function ItemRow({ item }: Props) {
         </p>
         <div className="file-row-meta">
           <p className="file-row-sub">
-            {item.itemType}
-            {folder ? ` · ${folder.name}` : ""}
-            {(item.openedAt || item.createdAtIso) ? ` · ${formatRelativeTime(item.openedAt || item.createdAtIso)}` : ""}
+            {(item.openedAt || item.createdAtIso) ? formatRelativeTime(item.openedAt || item.createdAtIso) : ""}
           </p>
           {extLabel && <span className="file-ext-badge">{extLabel}</span>}
         </div>
+      </div>
+      <div className="row-menu" ref={menuRef}>
+        <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}>&#x22EE;</button>
+        {menuOpen && (
+          <div className="row-menu-dropdown open">
+            <button onClick={(e) => {
+              e.stopPropagation();
+              const next = !item.isPinned;
+              useFilesStore.getState().updateItem(item.id, { isPinned: next });
+              useFilesStore.getState().persist();
+              void safeEntityUpdate("VaultItem", item.id, { is_pinned: next });
+              setMenuOpen(false);
+            }}>{item.isPinned ? t("menu.unpin") : t("menu.pin")}</button>
+            <button onClick={(e) => { e.stopPropagation(); openManageModal({ kind: "item", id: item.id, entity: "VaultItem" }, item.updatedAtIso || item.createdAtIso); setMenuOpen(false); }}>{t("menu.manage")}</button>
+            <hr />
+            <button className="danger" onClick={(e) => { e.stopPropagation(); openDeleteModal({ kind: "item", id: item.id, entity: "VaultItem" }); setMenuOpen(false); }}>{t("menu.delete")}</button>
+          </div>
+        )}
       </div>
     </article>
   );

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { invokeBase44Function, listVersions } from "../api";
+import { invokeEdgeFunction, listVersions } from "../api";
 import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeJwtSecret, getOnlyofficeServerUrl, getDeviceId } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
@@ -248,10 +248,18 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     }
 
     // Request editor session from server
-    const payload = await invokeBase44Function<Record<string, unknown>>("onlyofficeEditorSession", {
+    const payload = await invokeEdgeFunction<Record<string, unknown>>("onlyofficeEditorSession", {
       fileId,
       mode: "edit",
       device_id: getDeviceId(),
+    });
+
+    console.log("ONLYOFFICE: edge function response debug:", {
+      raw_url: payload.debug_raw_url,
+      download_url: payload.debug_download_url,
+      regex_matched: payload.debug_regex_matched,
+      onlyoffice_url: payload.onlyoffice_url,
+      has_jwt_secret: !!payload.jwt_secret,
     });
 
     const editorNode = (payload.editor as Record<string, unknown> | undefined) || payload;
@@ -259,6 +267,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     const configuredServerUrl = getOnlyofficeServerUrl();
     let documentServerUrl =
       configuredServerUrl ||
+      asString(payload.onlyoffice_url) ||
       asString(editorNode.document_server_url) ||
       asString(payload.document_server_url) ||
       "http://host.docker.internal";
@@ -287,14 +296,19 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     normalizedEditorConfig.callbackUrl = containerCallbackUrl;
     editorConfigNormalized.editorConfig = normalizedEditorConfig;
 
-    // Sign JWT
+    // Sign JWT — prefer secret from server, fall back to local setting
+    const serverJwtSecret = asString(payload.jwt_secret) || "";
     const localOnlyofficeJwtSecret =
-      (getOnlyofficeJwtSecret() || ONLYOFFICE_LOCAL_JWT_SECRET_FALLBACK).trim();
+      (serverJwtSecret || getOnlyofficeJwtSecret() || ONLYOFFICE_LOCAL_JWT_SECRET_FALLBACK).trim();
     if (localOnlyofficeJwtSecret) {
       editorConfigNormalized.token = await signOnlyofficeConfigToken(editorConfigNormalized, localOnlyofficeJwtSecret);
     }
 
-    console.log(`ONLYOFFICE: loading API from ${documentServerUrl}`);
+    console.log(`ONLYOFFICE: server URL = ${documentServerUrl}`);
+    console.log(`ONLYOFFICE: document URL = ${asString(normalizedDocument.url)}`);
+    console.log(`ONLYOFFICE: jwt_secret from server = ${serverJwtSecret ? "yes (" + serverJwtSecret.slice(0, 8) + "...)" : "none"}`);
+    console.log(`ONLYOFFICE: effective jwt secret = ${localOnlyofficeJwtSecret.slice(0, 8)}...`);
+    console.log("ONLYOFFICE: full config", JSON.stringify(editorConfigNormalized, null, 2));
     await ensureOnlyofficeApi(documentServerUrl);
     console.log("ONLYOFFICE: API loaded");
 
@@ -323,6 +337,7 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     const normalizedEditorConfigForUi = (editorConfigNormalized.editorConfig as Record<string, unknown> | undefined) || {};
     const normalizedCustomization = (normalizedEditorConfigForUi.customization as Record<string, unknown> | undefined) || {};
 
+    console.log(`ONLYOFFICE: document URL = ${asString(normalizedDocument.url)}`);
     console.log(`ONLYOFFICE: callback via relay ${asString(normalizedEditorConfigForUi.callbackUrl) || containerCallbackUrl}`);
 
     const editorConfig = {

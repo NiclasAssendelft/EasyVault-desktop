@@ -1,10 +1,9 @@
-import { entityList, entityFilter, entityDelete, callDeltaSync, invokeBase44Function } from "../api";
-import { BACKEND } from "../config";
+import { entityList, entityFilter, entityDelete, callDeltaSync, invokeEdgeFunction } from "../api";
 import { getAuthToken, getPreferredUploadToken, getSavedEmail } from "../storage";
 import {
   asString, asBool, asArray, normalizeFolder, normalizeItem,
-  isOnlyofficeRelayTempTitle, semverAtLeast,
-  type FileItemType, type EntityName, type DesktopItem,
+  isOnlyofficeRelayTempTitle,
+  type FileItemType, type DesktopItem,
 } from "./helpers";
 import { canUseRemoteData } from "./entityService";
 import { useAuthStore } from "../stores/authStore";
@@ -38,7 +37,7 @@ function spaceAllowed(spaceId: string): boolean {
 
 export async function refreshAccessScope(): Promise<void> {
   try {
-    const payload = await invokeBase44Function<{ space_ids?: string[]; personal_space_id?: string }>("getAccessibleSpaces", {});
+    const payload = await invokeEdgeFunction<{ space_ids?: string[]; personal_space_id?: string }>("getAccessibleSpaces", {});
     const spaceIds = Array.isArray(payload?.space_ids) ? payload.space_ids : [];
     const personalId = asString(payload?.personal_space_id);
     useAuthStore.getState().setAccessScope(spaceIds, personalId);
@@ -235,62 +234,6 @@ export async function refreshDropzoneFromRemote(): Promise<void> {
   }
 }
 
-type EntitySchemasResponse = {
-  version: string;
-  app_id: string;
-  generated_at: string;
-  entities: Record<string, { required: string[]; properties: Record<string, { type: string }>; built_in_fields: Record<string, { type: string }>; operations: string[] }>;
-  functions: Array<{ name: string; method: string; payload: object; returns: string; note?: string }>;
-  auth: { note: string; entity_endpoint_pattern: string; function_endpoint_pattern: string };
-};
-
-function parseEntitySchemasPayload(payload: unknown): EntitySchemasResponse {
-  if (!payload || typeof payload !== "object") throw new Error("entitySchemas payload is not an object");
-  const obj = payload as Record<string, unknown>;
-  if (typeof obj.version !== "string") throw new Error("entitySchemas.version missing");
-  if (typeof obj.app_id !== "string") throw new Error("entitySchemas.app_id missing");
-  if (typeof obj.generated_at !== "string") throw new Error("entitySchemas.generated_at missing");
-  if (!obj.entities || typeof obj.entities !== "object") throw new Error("entitySchemas.entities missing");
-  if (!Array.isArray(obj.functions)) throw new Error("entitySchemas.functions missing");
-  if (!obj.auth || typeof obj.auth !== "object") throw new Error("entitySchemas.auth missing");
-  const entities = obj.entities as Record<string, unknown>;
-  for (const [name, rawDef] of Object.entries(entities)) {
-    if (!rawDef || typeof rawDef !== "object") throw new Error(`entitySchemas.entities.${name} invalid`);
-    const def = rawDef as Record<string, unknown>;
-    if (!Array.isArray(def.required)) throw new Error(`entitySchemas.entities.${name}.required missing`);
-    if (!def.properties || typeof def.properties !== "object") throw new Error(`entitySchemas.entities.${name}.properties missing`);
-    if (!def.built_in_fields || typeof def.built_in_fields !== "object") throw new Error(`entitySchemas.entities.${name}.built_in_fields missing`);
-    if (!Array.isArray(def.operations)) throw new Error(`entitySchemas.entities.${name}.operations missing`);
-  }
-  return obj as unknown as EntitySchemasResponse;
-}
-
-export async function refreshEntitySchemas(): Promise<void> {
-  if (!canUseRemoteData()) return;
-  // entitySchemas is a Base44-only endpoint; skip when using Supabase
-  if (BACKEND === "supabase") return;
-  const sync = useSyncStore.getState();
-  try {
-    const rawPayload = await invokeBase44Function<unknown>("entitySchemas", {});
-    const payload = parseEntitySchemasPayload(rawPayload);
-    if (!semverAtLeast(payload.version, "1.0.0")) {
-      throw new Error(`Unsupported entitySchemas version: ${payload.version}`);
-    }
-    const entities: EntityName[] = ["Folder", "VaultItem", "EmailItem", "CalendarEvent", "Space", "GatherPack"];
-    for (const entity of entities) {
-      const entry = payload.entities[entity];
-      if (!entry) {
-        sync.setSchemaFields(entity, new Set<string>());
-        continue;
-      }
-      sync.setSchemaFields(entity, new Set<string>(Object.keys(entry.properties || {})));
-    }
-    sync.setSchemaInfo(payload.generated_at, payload.version, payload.functions.length);
-  } catch (err) {
-    console.warn("entitySchemas parse failed:", err);
-  }
-}
-
 export async function refreshAllRemoteData(): Promise<void> {
   await refreshAccessScope();
   await Promise.all([
@@ -300,7 +243,6 @@ export async function refreshAllRemoteData(): Promise<void> {
     refreshVaultFromRemote(),
     refreshSharedFromRemote(),
     refreshDropzoneFromRemote(),
-    refreshEntitySchemas(),
   ]);
 }
 

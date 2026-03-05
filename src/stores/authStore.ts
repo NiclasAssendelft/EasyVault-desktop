@@ -1,11 +1,11 @@
 import { create } from "zustand";
-import { login as apiLogin, signup as apiSignup, invokeBase44Function } from "../api";
+import { login as apiLogin, signup as apiSignup, invokeEdgeFunction } from "../api";
 import { getAuthToken, getSavedEmail, saveLogin, clearLogin, getExtensionToken, saveSettings } from "../storage";
 
 async function ensureExtensionToken(accessToken: string): Promise<void> {
   if (getExtensionToken()) return;
   try {
-    const res = await invokeBase44Function<{ token?: string }>(
+    const res = await invokeEdgeFunction<{ token?: string }>(
       "extensionAuth",
       { action: "create" },
       accessToken,

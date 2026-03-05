@@ -1,4 +1,4 @@
-import { entityCreate, entityUpdate, entityDelete, callDesktopSave, invokeBase44Function } from "../api";
+import { entityCreate, entityUpdate, entityDelete, callDesktopSave, invokeEdgeFunction } from "../api";
 import { getAuthToken } from "../storage";
 import { asString, isNotFoundError, type EntityName } from "./helpers";
 import { useSyncStore } from "../stores/syncStore";
@@ -73,7 +73,7 @@ export async function safeEntityUpdate(
 export async function deleteRemoteEntity(entity: "Folder" | "VaultItem" | "EmailItem" | "CalendarEvent" | "Space" | "GatherPack", id: string): Promise<void> {
   let desktopDeleteErr: unknown = null;
   try {
-    await invokeBase44Function("desktopDelete", { entity_name: entity, id });
+    await invokeEdgeFunction("desktopDelete", { entity_name: entity, id });
     return;
   } catch (err) {
     desktopDeleteErr = err;

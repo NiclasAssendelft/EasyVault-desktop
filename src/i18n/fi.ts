@@ -114,7 +114,7 @@ const fi: Record<keyof typeof en, string> = {
   "files.catRecent": "Viimeisimmät",
   "files.catShared": "Jaetut",
   "files.catItems": "kohdetta",
-  "files.catPinned": "Kiinnitetyt",
+  "files.catPinned": "\uD83D\uDCCC Kiinnitetyt",
 
   // EmailTab
   "email.connectTitle": "Yhdistä sähköpostisi",
@@ -408,7 +408,7 @@ const fi: Record<keyof typeof en, string> = {
   "manage.optionalPlaceholder": "Valinnainen {{label}}...",
   "manage.tagsLabel": "Tunnisteet (pilkuilla erotetut)",
   "manage.tagsPlaceholder": "tunniste1, tunniste2",
-  "manage.pinLabel": "Kiinnitä tämä kohde",
+  "manage.pinLabel": "\uD83D\uDCCC Kiinnitä tämä kohde",
   "manage.nameRequired": "Nimi vaaditaan.",
   "manage.error": "Virhe: {{error}}",
   "manage.cancel": "Peruuta",
@@ -440,8 +440,8 @@ const fi: Record<keyof typeof en, string> = {
   "fileAction.openNative": "Avaa ulkoisesti",
   "fileAction.editInApp": "Muokkaa sovelluksessa",
   "fileAction.manage": "Hallitse",
-  "fileAction.pin": "Kiinnitä",
-  "fileAction.unpin": "Irrota",
+  "fileAction.pin": "\uD83D\uDCCC Kiinnitä",
+  "fileAction.unpin": "\uD83D\uDCCC Irrota",
 
   // PreviewEditModal
   "previewEdit.preview": "Esikatselu",
@@ -475,8 +475,8 @@ const fi: Record<keyof typeof en, string> = {
 
   // Shared RowMenu
   "menu.manage": "Hallitse",
-  "menu.pin": "Kiinnitä",
-  "menu.unpin": "Irrota",
+  "menu.pin": "\uD83D\uDCCC Kiinnitä",
+  "menu.unpin": "\uD83D\uDCCC Irrota",
   "menu.delete": "Poista",
 
   // Lists

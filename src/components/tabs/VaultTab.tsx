@@ -5,7 +5,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { asString, normalizeFolder } from "../../services/helpers";
-import { invokeBase44Function, entityFilter } from "../../api";
+import { invokeEdgeFunction, entityFilter } from "../../api";
 import { safeEntityCreate } from "../../services/entityService";
 import { getPreferredUploadToken, getAuthToken } from "../../storage";
 import { useT, t } from "../../i18n";
@@ -81,7 +81,7 @@ export default function VaultTab() {
     setPendingResult(null);
     try {
       setStatus(t("vault.searching"));
-      const result = await invokeBase44Function<Record<string, unknown>>("gatherRelated", { topic: trimmed });
+      const result = await invokeEdgeFunction<Record<string, unknown>>("gatherRelated", { topic: trimmed });
 
       const items = (result?.items ?? {}) as GatherItems;
       const vaultCount = Array.isArray(items.vault) ? items.vault.length : 0;

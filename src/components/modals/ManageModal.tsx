@@ -17,6 +17,7 @@ export default function ManageModal() {
   const [nameVal, setNameVal] = useState("");
   const [notesVal, setNotesVal] = useState("");
   const [tagsVal, setTagsVal] = useState("");
+  const [isPinnedVal, setIsPinnedVal] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -24,10 +25,10 @@ export default function ManageModal() {
     if (!target) return;
     if (target.entity === "Folder") {
       const folder = useFilesStore.getState().folders.find((f) => f.id === target.id);
-      setNameVal(folder?.name || ""); setNotesVal(""); setTagsVal("");
+      setNameVal(folder?.name || ""); setNotesVal(""); setTagsVal(""); setIsPinnedVal(folder?.isPinned || false);
     } else if (target.entity === "VaultItem") {
       const item = useFilesStore.getState().items.find((i) => i.id === target.id);
-      setNameVal(item?.title || ""); setNotesVal(item?.notes || ""); setTagsVal((item?.tags || []).join(", "));
+      setNameVal(item?.title || ""); setNotesVal(item?.notes || ""); setTagsVal((item?.tags || []).join(", ")); setIsPinnedVal(item?.isPinned || false);
     } else if (target.entity === "EmailItem") {
       const row = useRemoteDataStore.getState().emails.find((e) => asString(e.id) === target.id);
       setNameVal(row ? asString(row.subject) : ""); setNotesVal(row ? asString(row.snippet) : ""); setTagsVal(row ? asArray(row.tags).join(", ") : "");
@@ -46,6 +47,7 @@ export default function ManageModal() {
   const entityType = target.entity;
   const showNotes = entityType !== "Folder";
   const showTags = entityType !== "Folder" && entityType !== "Space";
+  const showPin = entityType === "Folder" || entityType === "VaultItem" || entityType === "GatherPack";
 
   function getNameLabel(): string {
     if (entityType === "EmailItem") return t("manage.subject");
@@ -81,10 +83,10 @@ export default function ManageModal() {
 
       let payload: Record<string, unknown> = {};
       if (entityType === "Folder") {
-        payload = { name: trimmedName };
+        payload = { name: trimmedName, is_pinned: isPinnedVal };
       } else if (entityType === "VaultItem") {
         const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
-        payload = { title: trimmedName, notes: notesVal, tags };
+        payload = { title: trimmedName, notes: notesVal, tags, is_pinned: isPinnedVal };
       } else if (entityType === "EmailItem") {
         const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
         payload = { subject: trimmedName, snippet: notesVal, tags };
@@ -98,7 +100,7 @@ export default function ManageModal() {
       const result = await safeEntityUpdate(entityType, currentTarget.id, payload, baselineUpdatedAt);
 
       if (entityType === "Folder") {
-        useFilesStore.getState().updateFolder(currentTarget.id, { name: trimmedName });
+        useFilesStore.getState().updateFolder(currentTarget.id, { name: trimmedName, isPinned: isPinnedVal });
         useFilesStore.getState().persist();
         if (result) {
           const updatedAt = asString(result.updated_date, asString(result.created_date));
@@ -106,7 +108,7 @@ export default function ManageModal() {
         }
       } else if (entityType === "VaultItem") {
         const tags = tagsVal.split(",").map((tg) => tg.trim()).filter(Boolean);
-        useFilesStore.getState().updateItem(currentTarget.id, { title: trimmedName, notes: notesVal, tags });
+        useFilesStore.getState().updateItem(currentTarget.id, { title: trimmedName, notes: notesVal, tags, isPinned: isPinnedVal });
         useFilesStore.getState().persist();
         if (result) {
           const updatedAt = asString(result.updated_date, asString(result.created_date));
@@ -144,6 +146,12 @@ export default function ManageModal() {
               <label>{t("manage.tagsLabel")}</label>
               <input type="text" placeholder={t("manage.tagsPlaceholder")} value={tagsVal} onChange={(e) => setTagsVal(e.target.value)} />
             </>
+          )}
+          {showPin && (
+            <label className="inline-checkbox">
+              <input type="checkbox" checked={isPinnedVal} onChange={(e) => setIsPinnedVal(e.target.checked)} />
+              {t("manage.pinLabel")}
+            </label>
           )}
           {feedback && <p className="feedback-text">{feedback}</p>}
           <div className="actions-row">

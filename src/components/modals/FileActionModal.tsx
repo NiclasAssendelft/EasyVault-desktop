@@ -10,7 +10,8 @@ import { getSavedEmail } from "../../storage";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { fileKindFromItem, asString, getPreviewUrlForItem, toDisplayName } from "../../services/helpers";
-import { invokeBase44Function } from "../../api";
+import { invokeEdgeFunction } from "../../api";
+import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
 
 function canEditBySpace(spaceId: string, createdBy: string): boolean {
@@ -106,6 +107,14 @@ export default function FileActionModal() {
           <button type="button" className="ghost" onClick={handleOpenNative}>{t("fileAction.openNative")}</button>
           <button type="button" className="ghost" onClick={handleEditInApp}>{t("fileAction.editInApp")}</button>
           <button type="button" className="ghost" onClick={handleManage} disabled={!canEdit}>{t("fileAction.manage")}</button>
+          <button type="button" className="ghost" onClick={() => {
+            if (!item) return;
+            const next = !item.isPinned;
+            useFilesStore.getState().updateItem(item.id, { isPinned: next });
+            useFilesStore.getState().persist();
+            void safeEntityUpdate("VaultItem", item.id, { is_pinned: next });
+            close();
+          }}>{item.isPinned ? t("fileAction.unpin") : t("fileAction.pin")}</button>
         </div>
         {item.spaceId && <FileCommentsSection itemId={item.id} spaceId={item.spaceId} />}
       </div>
@@ -131,7 +140,7 @@ function FileCommentsSection({ itemId, spaceId }: { itemId: string; spaceId: str
 
   const fetchComments = useCallback(async () => {
     try {
-      const res = await invokeBase44Function<{ comments?: FileComment[] }>("fileComments", { item_id: itemId, action: "list" });
+      const res = await invokeEdgeFunction<{ comments?: FileComment[] }>("fileComments", { item_id: itemId, action: "list" });
       setComments(res.comments || []);
     } catch { /* ignore */ }
   }, [itemId]);
@@ -151,7 +160,7 @@ function FileCommentsSection({ itemId, spaceId }: { itemId: string; spaceId: str
     setSending(true);
     try {
       const me = getSavedEmail().trim().toLowerCase();
-      await invokeBase44Function("fileComments", {
+      await invokeEdgeFunction("fileComments", {
         item_id: itemId,
         space_id: spaceId,
         action: "create",

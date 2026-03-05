@@ -6,7 +6,7 @@ import { asString, toDisplayName } from "../../services/helpers";
 import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService";
 import { entityCreate, entityDelete } from "../../api";
 import { refreshSharedFromRemote, refreshAccessScope } from "../../services/deltaSyncService";
-import { invokeBase44Function } from "../../api";
+import { invokeEdgeFunction } from "../../api";
 import { uploadSelectedFilesToSpace } from "../../services/fileOps";
 import { getSavedEmail } from "../../storage";
 import { useT, t } from "../../i18n";
@@ -216,7 +216,7 @@ export default function SharedTab() {
 
   const fetchChatMessages = useCallback(async (spaceId: string) => {
     try {
-      const res = await invokeBase44Function<{ messages?: SpaceMessage[] }>("spaceMessages", { space_id: spaceId });
+      const res = await invokeEdgeFunction<{ messages?: SpaceMessage[] }>("spaceMessages", { space_id: spaceId });
       const msgs = res.messages || [];
       setChatMessages(msgs.reverse());
     } catch { /* ignore */ }
@@ -236,7 +236,7 @@ export default function SharedTab() {
 
   const fetchTasks = useCallback(async (spaceId: string) => {
     try {
-      const res = await invokeBase44Function<{ tasks?: SpaceTask[] }>("spaceTasks", { space_id: spaceId, action: "list" });
+      const res = await invokeEdgeFunction<{ tasks?: SpaceTask[] }>("spaceTasks", { space_id: spaceId, action: "list" });
       setTasks(res.tasks || []);
     } catch { /* ignore */ }
   }, []);
@@ -251,7 +251,7 @@ export default function SharedTab() {
 
   const fetchActivity = useCallback(async (spaceId: string) => {
     try {
-      const res = await invokeBase44Function<{ activities?: ActivityEntry[] }>("spaceActivity", { space_id: spaceId });
+      const res = await invokeEdgeFunction<{ activities?: ActivityEntry[] }>("spaceActivity", { space_id: spaceId });
       setActivities(res.activities || []);
     } catch { /* ignore */ }
   }, []);
@@ -291,10 +291,10 @@ export default function SharedTab() {
             try { await safeEntityCreate("Folder", { name: folderName, space_id: spaceId }); } catch { /* ignore */ }
           }
           for (const taskTitle of tmpl.tasks) {
-            try { await invokeBase44Function("spaceTasks", { space_id: spaceId, action: "create", title: taskTitle }); } catch { /* ignore */ }
+            try { await invokeEdgeFunction("spaceTasks", { space_id: spaceId, action: "create", title: taskTitle }); } catch { /* ignore */ }
           }
           if (tmpl.welcome) {
-            try { await invokeBase44Function("spaceMessages", { space_id: spaceId, message: tmpl.welcome, sender_name: "EasyVault" }); } catch { /* ignore */ }
+            try { await invokeEdgeFunction("spaceMessages", { space_id: spaceId, message: tmpl.welcome, sender_name: "EasyVault" }); } catch { /* ignore */ }
           }
         }
       }
@@ -321,7 +321,7 @@ export default function SharedTab() {
       if (replyTo) payload.reply_to_id = replyTo.id;
       const mentionMatches = chatInput.match(/@(\S+)/g);
       if (mentionMatches) payload.mentions = mentionMatches.map((m) => m.slice(1).toLowerCase());
-      await invokeBase44Function("spaceMessages", payload);
+      await invokeEdgeFunction("spaceMessages", payload);
       setChatInput("");
       setReplyTo(null);
       await fetchChatMessages(activeSpaceId);
@@ -332,7 +332,7 @@ export default function SharedTab() {
   const handlePinMessage = useCallback(async (msgId: string) => {
     if (!activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceMessages", { space_id: activeSpaceId, action: "pin", pin_message_id: msgId });
+      await invokeEdgeFunction("spaceMessages", { space_id: activeSpaceId, action: "pin", pin_message_id: msgId });
       await fetchChatMessages(activeSpaceId);
     } catch { /* ignore */ }
   }, [activeSpaceId, fetchChatMessages]);
@@ -341,7 +341,7 @@ export default function SharedTab() {
     if (!inviteEmail.trim() || !activeSpaceId) return;
     setInviting(true);
     try {
-      await invokeBase44Function("spaceInvite", { space_id: activeSpaceId, email: inviteEmail.trim(), role: inviteRole });
+      await invokeEdgeFunction("spaceInvite", { space_id: activeSpaceId, email: inviteEmail.trim(), role: inviteRole });
       setStatus(t("shared.invited", { email: inviteEmail.trim(), role: inviteRole }));
       setInviteOpen(false);
       setInviteEmail("");
@@ -354,7 +354,7 @@ export default function SharedTab() {
   const handleRemoveMember = useCallback(async (email: string) => {
     if (!activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceRemoveMember", { space_id: activeSpaceId, email });
+      await invokeEdgeFunction("spaceRemoveMember", { space_id: activeSpaceId, email });
       setStatus(t("shared.removed", { email }));
       setConfirmRemoveEmail(null);
       await refreshSharedFromRemote();
@@ -364,7 +364,7 @@ export default function SharedTab() {
   const handleUpdateRole = useCallback(async (email: string, newRole: string) => {
     if (!activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceUpdateRole", { space_id: activeSpaceId, email, role: newRole });
+      await invokeEdgeFunction("spaceUpdateRole", { space_id: activeSpaceId, email, role: newRole });
       setStatus(t("shared.roleUpdated", { role: newRole }));
       await refreshSharedFromRemote();
     } catch (err) { setStatus(t("shared.roleUpdateFailed", { error: String(err) })); }
@@ -409,7 +409,7 @@ export default function SharedTab() {
   const handleAddTask = useCallback(async () => {
     if (!newTaskTitle.trim() || !activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceTasks", { space_id: activeSpaceId, action: "create", title: newTaskTitle.trim() });
+      await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "create", title: newTaskTitle.trim() });
       setNewTaskTitle("");
       await fetchTasks(activeSpaceId);
     } catch { /* ignore */ }
@@ -418,7 +418,7 @@ export default function SharedTab() {
   const handleToggleTask = useCallback(async (taskId: string, completed: boolean) => {
     if (!activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceTasks", { space_id: activeSpaceId, action: "update", task_id: taskId, is_completed: !completed });
+      await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "update", task_id: taskId, is_completed: !completed });
       await fetchTasks(activeSpaceId);
     } catch { /* ignore */ }
   }, [activeSpaceId, fetchTasks]);
@@ -426,7 +426,7 @@ export default function SharedTab() {
   const handleDeleteTask = useCallback(async (taskId: string) => {
     if (!activeSpaceId) return;
     try {
-      await invokeBase44Function("spaceTasks", { space_id: activeSpaceId, action: "delete", task_id: taskId });
+      await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "delete", task_id: taskId });
       await fetchTasks(activeSpaceId);
     } catch { /* ignore */ }
   }, [activeSpaceId, fetchTasks]);
@@ -434,7 +434,7 @@ export default function SharedTab() {
   const handleCopyInviteLink = useCallback(async () => {
     if (!activeSpaceId) return;
     try {
-      const res = await invokeBase44Function<{ token?: string }>("spaceInviteLink", { space_id: activeSpaceId, action: "create", role: inviteLinkRole });
+      const res = await invokeEdgeFunction<{ token?: string }>("spaceInviteLink", { space_id: activeSpaceId, action: "create", role: inviteLinkRole });
       if (res.token) { await navigator.clipboard.writeText(res.token); setStatus(t("shared.inviteLinkCopied")); }
     } catch (err) { setStatus(t("shared.inviteLinkFailed", { error: String(err) })); }
   }, [activeSpaceId, inviteLinkRole, setStatus]);
@@ -443,7 +443,7 @@ export default function SharedTab() {
     if (!joinCode.trim()) return;
     setJoining(true);
     try {
-      await invokeBase44Function("spaceInviteLink", { action: "join", token: joinCode.trim() });
+      await invokeEdgeFunction("spaceInviteLink", { action: "join", token: joinCode.trim() });
       setStatus(t("shared.joined"));
       setJoinCode("");
       await refreshAccessScope();

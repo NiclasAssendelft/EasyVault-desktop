@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useUiStore } from "../../stores/uiStore";
 import { asString, asBool } from "../../services/helpers";
-import { invokeBase44Function } from "../../api";
+import { invokeEdgeFunction } from "../../api";
 import { refreshEmailFromRemote } from "../../services/deltaSyncService";
 import { getEmailSyncCount } from "../../storage";
 import { useT, t } from "../../i18n";
@@ -85,7 +85,7 @@ export default function EmailTab() {
     try {
       setStatus(t("email.syncingGmail"));
       const limit = getEmailSyncCount();
-      await invokeBase44Function("syncGmail", { limit });
+      await invokeEdgeFunction("syncGmail", { limit });
       await refreshEmailFromRemote();
       setStatus(t("email.gmailSynced"));
     } catch (err) {
@@ -100,7 +100,7 @@ export default function EmailTab() {
     try {
       setStatus(t("email.syncingOutlook"));
       const limit = getEmailSyncCount();
-      await invokeBase44Function("syncOutlookEmails", { limit });
+      await invokeEdgeFunction("syncOutlookEmails", { limit });
       await refreshEmailFromRemote();
       setStatus(t("email.outlookSynced"));
     } catch (err) {

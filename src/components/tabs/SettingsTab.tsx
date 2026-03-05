@@ -12,7 +12,7 @@ import {
   getEmailSyncCount, setEmailSyncCount,
 } from "../../storage";
 import { canUseRemoteData } from "../../services/entityService";
-import { refreshAllRemoteData, refreshEntitySchemas } from "../../services/deltaSyncService";
+import { refreshAllRemoteData } from "../../services/deltaSyncService";
 import { useT, t } from "../../i18n";
 
 export default function SettingsTab() {
@@ -27,6 +27,7 @@ export default function SettingsTab() {
   const [onlyofficeJwt, setOnlyofficeJwt] = useState(() => getOnlyofficeJwtSecret());
   const [onlyofficeServerUrl, setOnlyofficeServerUrlState] = useState(() => getOnlyofficeServerUrl());
   const [emailSyncCountVal, setEmailSyncCountVal] = useState(() => getEmailSyncCount());
+  const [showToken, setShowToken] = useState(false);
   const [report, setReport] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
 
@@ -104,7 +105,6 @@ export default function SettingsTab() {
   const handleHealthCheck = useCallback(async () => {
     setHealthStatus(t("settings.checking"));
     try {
-      await refreshEntitySchemas();
       await refreshAllRemoteData();
       setHealthStatus(t("settings.healthPassed"));
       setReport(buildReport());
@@ -132,7 +132,11 @@ export default function SettingsTab() {
         <h4>{tr("settings.title")}</h4>
         <form className="form" onSubmit={handleSave}>
           <label>{tr("settings.extensionTokenLabel")}</label>
-          <input type="text" placeholder={tr("settings.extensionTokenPlaceholder")} value={extensionToken} onChange={(e) => setExtensionToken(e.target.value)} />
+          <div className="token-input-row">
+            <input type={showToken ? "text" : "password"} placeholder={tr("settings.extensionTokenPlaceholder")} value={extensionToken} onChange={(e) => setExtensionToken(e.target.value)} />
+            <button type="button" className="ghost token-toggle" onClick={() => setShowToken(!showToken)} title={showToken ? "Hide" : "Show"}>{showToken ? "\u{1F441}" : "\u25CF\u25CF\u25CF"}</button>
+            <button type="button" className="ghost token-toggle" onClick={() => { void navigator.clipboard.writeText(extensionToken).then(() => setStatus(t("settings.saved"))); }} title="Copy">{"\u{1F4CB}"}</button>
+          </div>
 
           <label>{tr("settings.watchFolderLabel")}</label>
           <input type="text" placeholder={tr("settings.watchFolderPlaceholder")} value={watchPath} onChange={(e) => setWatchPath(e.target.value)} />
@@ -152,6 +156,9 @@ export default function SettingsTab() {
 
           <label>{tr("settings.onlyofficeUrlLabel")}</label>
           <input type="text" placeholder={tr("settings.onlyofficeUrlPlaceholder")} value={onlyofficeServerUrl} onChange={(e) => setOnlyofficeServerUrlState(e.target.value)} />
+          {onlyofficeServerUrl.startsWith("http://") && (
+            <p className="field-warning">{tr("settings.httpsWarning")}</p>
+          )}
 
           <label>{tr("settings.onlyofficeJwtLabel")}</label>
           <input type="password" placeholder={tr("settings.onlyofficeJwtPlaceholder")} value={onlyofficeJwt} onChange={(e) => setOnlyofficeJwt(e.target.value)} />
