@@ -710,6 +710,22 @@ const en = {
   // LinkRow menu
   "linkMenu.open": "Open in Browser",
   "linkMenu.edit": "Edit",
+
+  // Translate panel
+  "translate.button": "Translate",
+  "translate.title": "Translation",
+  "translate.targetLang": "Target language",
+  "translate.translate": "Translate",
+  "translate.translating": "Translating...",
+  "translate.chunkProgress": "Translating part {{current}} of {{total}}...",
+  "translate.extracting": "Extracting text...",
+  "translate.extractFailed": "Could not extract text: {{error}}",
+  "translate.noText": "No text content found to translate",
+  "translate.done": "Translation complete",
+  "translate.failed": "Translation failed: {{error}}",
+  "translate.copy": "Copy",
+  "translate.copied": "Copied!",
+  "translate.close": "Close",
 } as const;
 
 export default en;

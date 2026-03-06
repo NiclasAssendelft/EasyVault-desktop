@@ -8,6 +8,7 @@ import { syncRemoteDelta } from "../../services/deltaSyncService";
 import {
   fileKindFromItem, asString, toAdapterItem, getPreviewUrlForItem, formatRelativeTime, type PreviewKind,
 } from "../../services/helpers";
+import type { DesktopItem } from "../../services/helpers";
 import {
   callDesktopSave, downloadFile, uploadFileWithToken, checkoutFile, listVersions, createNewVersion, sha256Hex,
 } from "../../api";
@@ -19,12 +20,23 @@ import { imagePinturaAdapter } from "../../editors/image.pintura.adapter";
 import { officeOnlyofficeAdapter } from "../../editors/office.onlyoffice.adapter";
 import type { EditorAdapter, AdapterRenderContext, AdapterSaveContext } from "../../editors/types";
 import { useT, t } from "../../i18n";
+import { extractTextFromPdf, extractTextFromDocx, extractTextFromPlainFile } from "../../services/textExtractService";
+import TranslatePanel from "../TranslatePanel";
 
 function adapterForKind(kind: PreviewKind): EditorAdapter | null {
   if (kind === "pdf") return pdfNutrientAdapter;
   if (kind === "image") return imagePinturaAdapter;
   if (kind === "office") return officeOnlyofficeAdapter;
   return null;
+}
+
+const TRANSLATABLE_EXTS = new Set(["pdf", "docx", "txt", "md", "csv", "rtf"]);
+
+function isTranslatable(kind: PreviewKind, item: DesktopItem): boolean {
+  if (kind === "note" || kind === "link" || kind === "pdf") return true;
+  if (kind === "image") return false;
+  const ext = item.fileExtension?.replace(/^\./, "").toLowerCase() || "";
+  return TRANSLATABLE_EXTS.has(ext);
 }
 
 export default function PreviewEditModal() {
@@ -47,6 +59,10 @@ export default function PreviewEditModal() {
 
   const [statusText, setStatusText] = useState("");
   const [persistedError, setPersistedError] = useState("");
+  const [showTranslate, setShowTranslate] = useState(false);
+  const [translateSourceText, setTranslateSourceText] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractError, setExtractError] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
   const adapterRenderedRef = useRef(false);
 
@@ -73,7 +89,49 @@ export default function PreviewEditModal() {
     if (lower.includes("failed") || lower.includes("error") || lower.includes("timeout")) setPersistedError(globalStatus);
   }, [globalStatus]);
 
-  const handleClose = useCallback(() => { closeStore(); setStatusText(""); setPersistedError(""); }, [closeStore]);
+  const handleClose = useCallback(() => { closeStore(); setStatusText(""); setPersistedError(""); setShowTranslate(false); setTranslateSourceText(""); }, [closeStore]);
+
+  const handleTranslateToggle = useCallback(async () => {
+    if (showTranslate) { setShowTranslate(false); return; }
+    if (!item) return;
+    setShowTranslate(true);
+    setExtractError("");
+
+    const k = fileKindFromItem(item);
+    if (k === "note") {
+      setTranslateSourceText(item.contentText || item.notes || "");
+      return;
+    }
+    if (k === "link") {
+      setTranslateSourceText([item.sourceUrl, item.notes].filter(Boolean).join("\n"));
+      return;
+    }
+
+    const url = getPreviewUrlForItem(item);
+    if (!url) { setExtractError("No file URL available"); return; }
+
+    setIsExtracting(true);
+    try {
+      const bytes = await downloadFile(url);
+      const ext = item.fileExtension?.replace(/^\./, "").toLowerCase() || "";
+      let text = "";
+      if (ext === "pdf" || k === "pdf") {
+        text = await extractTextFromPdf(bytes);
+      } else if (ext === "docx") {
+        text = await extractTextFromDocx(bytes);
+      } else {
+        text = extractTextFromPlainFile(bytes);
+      }
+      if (!text.trim()) {
+        setExtractError(t("translate.noText"));
+      }
+      setTranslateSourceText(text);
+    } catch (err) {
+      setExtractError(t("translate.extractFailed", { error: String(err) }));
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [showTranslate, item]);
 
   if (!targetId) return null;
   if (!item) return null;
@@ -82,6 +140,7 @@ export default function PreviewEditModal() {
   const adapter = adapterForKind(realKind);
   const updatedAtIso = item.updatedAtIso || item.createdAtIso;
   const relativeTime = formatRelativeTime(updatedAtIso);
+  const translatable = isTranslatable(realKind, item);
 
   async function handleOpenNative() {
     const previewUrl = getPreviewUrlForItem(item!);
@@ -220,10 +279,25 @@ export default function PreviewEditModal() {
           </p>
         )}
 
-        {renderBody()}
+        {showTranslate ? (
+          <div className="preview-translate-layout">
+            <div className="preview-translate-main">{renderBody()}</div>
+            <TranslatePanel
+              sourceText={translateSourceText}
+              isExtracting={isExtracting}
+              extractError={extractError}
+              onClose={() => setShowTranslate(false)}
+            />
+          </div>
+        ) : renderBody()}
 
         <div className="actions-row preview-edit-actions">
           <button type="button" className="ghost" onClick={handleOpenNative}>{tr("previewEdit.openNative")}</button>
+          {translatable && (
+            <button type="button" className={`ghost${showTranslate ? " active" : ""}`} onClick={handleTranslateToggle}>
+              {tr("translate.button")}
+            </button>
+          )}
           <button type="button" className="ghost" onClick={handleToggleMode} disabled={!canEdit && mode === "preview"}>
             {mode === "preview" ? tr("previewEdit.switchToEdit") : tr("previewEdit.switchToPreview")}
           </button>

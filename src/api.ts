@@ -6,7 +6,7 @@ import {
 } from "./config";
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
-import { getAuthToken, getRefreshToken, saveLogin, getDeviceId } from "./storage";
+import { getAuthToken, getRefreshToken, getExtensionToken, saveLogin, getDeviceId } from "./storage";
 
 // ── Entity name → Supabase table name mapping ──────────────────────
 const TABLE_MAP: Record<string, string> = {
@@ -204,7 +204,6 @@ function triggerAutoLogout(): void {
 export async function ensureFreshToken(): Promise<string> {
   const token = getAuthToken();
   if (token) {
-    // Check if JWT is expired by decoding payload
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
       if (payload.exp && payload.exp * 1000 > Date.now() + 30000) {
@@ -261,10 +260,13 @@ export async function invokeEdgeFunction<T = unknown>(
     throw new Error(`No Edge Function mapped for "${name}"`);
   }
   const url = `${SUPABASE_FUNCTIONS_URL}/${edgeName}`;
-  const userToken = token || await ensureFreshToken();
+  // Use anon key as Bearer so Supabase infrastructure accepts the request.
+  // Pass the actual user token in the body for resolveUser() to validate.
+  // Prefer extension token (never expires) over JWT.
+  const userToken = token || getExtensionToken() || getAuthToken() || "";
   const res = await tauriFetch(url, {
     method: "POST",
-    headers: supabaseHeaders(userToken || SUPABASE_ANON_KEY),
+    headers: supabaseHeaders(SUPABASE_ANON_KEY),
     body: JSON.stringify({ ...payload, token: userToken }),
   });
   const data = await res.json().catch(() => ({}));
@@ -372,7 +374,9 @@ export async function entityList<T = Record<string, unknown>>(
     headers: supabaseRestHeaders(freshToken),
   });
   const data = await res.json().catch(() => []);
-  if (!res.ok) throw new Error(`entityList ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+  if (!res.ok) {
+    throw new Error(`entityList ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+  }
   return mapSupabaseRecords<T>(Array.isArray(data) ? data : []);
 }
 
@@ -395,7 +399,9 @@ export async function entityFilter<T = Record<string, unknown>>(
     headers: supabaseRestHeaders(freshToken),
   });
   const data = await res.json().catch(() => []);
-  if (!res.ok) throw new Error(`entityFilter ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+  if (!res.ok) {
+    throw new Error(`entityFilter ${entityName} failed (${res.status}): ${JSON.stringify(data)}`);
+  }
   return mapSupabaseRecords<T>(Array.isArray(data) ? data : []);
 }
 
@@ -582,7 +588,7 @@ export async function uploadFileWithToken(
   const mimeType = guessMimeType(filename);
 
   const initUrl = `${SUPABASE_FUNCTIONS_URL}/upload-init`;
-  const initHeaders = supabaseHeaders(token || getAuthToken() || SUPABASE_ANON_KEY);
+  const initHeaders = supabaseHeaders(SUPABASE_ANON_KEY);
 
   const initRes = await tauriFetch(initUrl, {
     method: "POST",
@@ -625,7 +631,7 @@ export async function uploadFileWithToken(
 
     const chunkHeaders: Record<string, string> = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${token || getAuthToken() || SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     };
     const chunkRes = await tauriFetch(chunkUrl, {
       method: "POST",
@@ -650,7 +656,7 @@ export async function uploadFileWithToken(
   let completeData: unknown = null;
   if (!fileUrl) {
     const completeUrl = `${SUPABASE_FUNCTIONS_URL}/upload-complete`;
-    const completeHeaders = supabaseHeaders(token || getAuthToken() || SUPABASE_ANON_KEY);
+    const completeHeaders = supabaseHeaders(SUPABASE_ANON_KEY);
 
     const completeRes = await tauriFetch(completeUrl, {
       method: "POST",

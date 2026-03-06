@@ -15,13 +15,16 @@ export default function FolderCard({ folder, onClick }: Props) {
   const openManageModal = useUiStore((s) => s.openManageModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const t = useT();
 
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          btnRef.current && !btnRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -42,10 +45,17 @@ export default function FolderCard({ folder, onClick }: Props) {
           {formatRelativeTime(folder.createdAtIso)}
         </p>
       </div>
-      <div className="row-menu" ref={menuRef}>
-        <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}>&#x22EE;</button>
+      <div className="row-menu">
+        <button ref={btnRef} className="row-menu-btn" onClick={(e) => {
+          e.stopPropagation();
+          if (!menuOpen && btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setMenuPos({ top: r.bottom + 4, left: r.right });
+          }
+          setMenuOpen(!menuOpen);
+        }}>&#x22EE;</button>
         {menuOpen && (
-          <div className="row-menu-dropdown open">
+          <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, left: "auto", right: window.innerWidth - menuPos.left }}>
             <button onClick={(e) => {
               e.stopPropagation();
               const next = !folder.isPinned;

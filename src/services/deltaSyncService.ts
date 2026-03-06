@@ -22,11 +22,11 @@ function isOwnedByCurrentUser(row: Record<string, unknown>): boolean {
   return asString(row.created_by).toLowerCase() === me;
 }
 
-/** Personal items must be owned by current user; shared-space items visible if space is accessible. */
+/** Items owned by current user always visible; shared-space items visible if space is accessible. */
 function isOwnedOrInSharedSpace(row: Record<string, unknown>): boolean {
+  if (isOwnedByCurrentUser(row)) return true;
   const spaceId = asString(row.space_id);
-  if (spaceId) return spaceAllowed(spaceId);
-  return isOwnedByCurrentUser(row);
+  return spaceId ? spaceAllowed(spaceId) : false;
 }
 
 function spaceAllowed(spaceId: string): boolean {

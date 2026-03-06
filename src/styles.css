@@ -1901,6 +1901,144 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* ── Translate panel layout ───────────────────────────────────────── */
+
+.preview-translate-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.preview-translate-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.preview-translate-main .preview-edit-body {
+  border-radius: 10px 0 0 10px;
+}
+
+.translate-panel {
+  width: 360px;
+  min-width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line-2);
+  background: rgba(11, 11, 18, 0.97);
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.translate-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e4ef;
+}
+
+.translate-close-btn {
+  font-size: 14px;
+  padding: 2px 6px !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.translate-panel-label {
+  font-size: 12px;
+  color: #71717a;
+  margin-bottom: -4px;
+}
+
+.translate-panel select {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: #101018;
+  color: #e0e4ef;
+  font-size: 13px;
+}
+
+.translate-btn-row {
+  display: flex;
+  gap: 6px;
+}
+
+.translate-btn-row button {
+  font-size: 13px;
+  padding: 6px 14px;
+}
+
+.translate-panel-status {
+  font-size: 12px;
+  color: #a1a1aa;
+  margin: 0;
+}
+
+.translate-panel-status.status-error {
+  color: #ef4444;
+}
+
+.translate-panel-output {
+  flex: 1;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #d4d4d8;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  min-height: 80px;
+}
+
+.translate-panel-source {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.translate-panel-source-label {
+  font-size: 11px;
+  color: #52525b;
+  margin: 0;
+}
+
+.translate-panel-source-preview {
+  flex: 1;
+  color: #71717a;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .preview-translate-layout {
+    flex-direction: column;
+  }
+  .translate-panel {
+    width: 100%;
+    min-width: 0;
+    max-height: 300px;
+    border-left: 0;
+    border-top: 1px solid var(--line-2);
+  }
+  .preview-translate-main .preview-edit-body {
+    border-radius: 10px 10px 0 0;
+  }
+}
+
+/* ── End translate panel ─────────────────────────────────────────── */
+
 .preview-textarea {
   width: 100%;
   border: 1px solid var(--line-2);

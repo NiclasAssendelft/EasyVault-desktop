@@ -705,6 +705,22 @@ const sv: Record<keyof typeof en, string> = {
   "importLinks.done": "Importerade {{count}} länkar",
   "linkMenu.open": "Öppna i webbläsaren",
   "linkMenu.edit": "Redigera",
+
+  // Translate panel
+  "translate.button": "Översätt",
+  "translate.title": "Översättning",
+  "translate.targetLang": "Målspråk",
+  "translate.translate": "Översätt",
+  "translate.translating": "Översätter...",
+  "translate.chunkProgress": "Översätter del {{current}} av {{total}}...",
+  "translate.extracting": "Extraherar text...",
+  "translate.extractFailed": "Kunde inte extrahera text: {{error}}",
+  "translate.noText": "Inget textinnehåll att översätta",
+  "translate.done": "Översättning klar",
+  "translate.failed": "Översättning misslyckades: {{error}}",
+  "translate.copy": "Kopiera",
+  "translate.copied": "Kopierat!",
+  "translate.close": "Stäng",
 };
 
 export default sv;

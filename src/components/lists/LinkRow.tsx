@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { DesktopItem } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
@@ -18,7 +18,20 @@ export default function LinkRow({ item }: { item: DesktopItem }) {
   const openSaveLinkModal = useUiStore((s) => s.openSaveLinkModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const t = useT();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          btnRef.current && !btnRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   const domain = extractDomain(item.sourceUrl || "");
   const userTags = (item.tags || []).filter((tg) => !tg.startsWith("status:"));
@@ -70,9 +83,16 @@ export default function LinkRow({ item }: { item: DesktopItem }) {
       </div>
 
       <div className="row-menu">
-        <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}>&#x22EE;</button>
+        <button ref={btnRef} className="row-menu-btn" onClick={(e) => {
+          e.stopPropagation();
+          if (!menuOpen && btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setMenuPos({ top: r.bottom + 4, left: r.right });
+          }
+          setMenuOpen(!menuOpen);
+        }}>&#x22EE;</button>
         {menuOpen && (
-          <div className="row-menu-dropdown open">
+          <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, left: "auto", right: window.innerWidth - menuPos.left }}>
             <button onClick={handleOpen}>{t("linkMenu.open")}</button>
             <button onClick={(e) => { e.stopPropagation(); openSaveLinkModal(item.id); setMenuOpen(false); }}>{t("linkMenu.edit")}</button>
             <hr />

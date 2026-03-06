@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -280,6 +281,46 @@ fn set_onlyoffice_relay_auth(token: String, api_key: Option<String>) -> Result<(
         api_key: clean_api_key,
     });
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Editor config store — holds temporary editor configs for the /editor page
+// ---------------------------------------------------------------------------
+
+fn editor_config_store() -> &'static Mutex<HashMap<String, String>> {
+    static STORE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[tauri::command]
+fn store_onlyoffice_editor_config(config_json: String) -> Result<String, String> {
+    let session_id = format!("{:016x}", rand_u64());
+    let mut guard = editor_config_store()
+        .lock()
+        .map_err(|_| "editor config lock poisoned".to_string())?;
+    // Auto-clean: keep max 5 entries
+    while guard.len() >= 5 {
+        if let Some(oldest_key) = guard.keys().next().cloned() {
+            guard.remove(&oldest_key);
+        }
+    }
+    guard.insert(session_id.clone(), config_json);
+    Ok(session_id)
+}
+
+/// Simple pseudo-random u64 using system time (no external crate needed)
+fn rand_u64() -> u64 {
+    use std::time::SystemTime;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    // Mix bits for better distribution
+    let mut x = nanos as u64;
+    x ^= x >> 13;
+    x = x.wrapping_mul(0x2545F4914F6CDD1D);
+    x ^= x >> 27;
+    x
 }
 
 fn relay_stats_store() -> &'static Mutex<OnlyofficeRelayStats> {
@@ -678,6 +719,125 @@ fn start_onlyoffice_callback_relay() {
                 continue;
             }
 
+            // ── /editor?id=XXX — serve the ONLYOFFICE editor HTML shell ──
+            if method == Method::Get && path.starts_with("/editor") && !path.starts_with("/editor-config") {
+                let editor_html = r##"<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
+#oo-editor{width:100%;height:100%}
+#status{position:fixed;top:0;left:0;right:0;padding:12px 20px;font-family:sans-serif;font-size:14px;color:#ccc;background:#1a1a2e;z-index:99999}
+#status .err{color:#ff6b6b}
+</style>
+</head><body>
+<div id="oo-editor"></div>
+<div id="status">Loading ONLYOFFICE editor...</div>
+<script>
+(async function() {
+  var el = document.getElementById("status");
+  function log(msg) { el.textContent = msg; console.log("[oo-editor] " + msg); }
+  function err(msg) { el.innerHTML = '<span class="err">' + msg + '</span>'; console.error("[oo-editor] " + msg); }
+  try {
+    var params = new URLSearchParams(location.search);
+    var id = params.get("id");
+    if (!id) throw new Error("Missing session id");
+
+    log("Fetching editor config...");
+    var resp = await fetch("/editor-config?id=" + encodeURIComponent(id));
+    if (!resp.ok) throw new Error("Config fetch failed (HTTP " + resp.status + ")");
+    var data = await resp.json();
+    if (data.error) throw new Error("Config error: " + data.error);
+
+    var serverUrl = (data.documentServerUrl || "").replace(/\/+$/, "");
+    if (!serverUrl) throw new Error("Missing documentServerUrl in config");
+    log("Loading api.js from " + serverUrl + "...");
+
+    var script = document.createElement("script");
+    script.src = serverUrl + "/web-apps/apps/api/documents/api.js";
+    script.onload = function() {
+      log("api.js loaded, creating editor...");
+      if (typeof DocsAPI === "undefined" || !DocsAPI.DocEditor) {
+        err("DocsAPI not found after loading api.js");
+        parent.postMessage({type:"oo-error", detail:"DocsAPI not found"}, "*");
+        return;
+      }
+      var config = data.config || {};
+      config.width = "100%";
+      config.height = "100%";
+      config.events = {
+        onAppReady: function() {
+          el.style.display = "none";
+          parent.postMessage({type:"oo-ready"}, "*");
+        },
+        onError: function(e) {
+          err("Editor error: " + JSON.stringify(e));
+          parent.postMessage({type:"oo-error", detail: JSON.stringify(e)}, "*");
+        },
+        onWarning: function(e) { parent.postMessage({type:"oo-warning", detail: JSON.stringify(e)}, "*"); },
+        onRequestClose: function() { parent.postMessage({type:"oo-close"}, "*"); },
+        onDocumentStateChange: function(e) { parent.postMessage({type:"oo-state", detail: e}, "*"); }
+      };
+      try {
+        new DocsAPI.DocEditor("oo-editor", config);
+        log("DocEditor created, waiting for onAppReady...");
+        parent.postMessage({type:"oo-mounted"}, "*");
+      } catch(e) {
+        err("DocEditor init failed: " + e.message);
+        parent.postMessage({type:"oo-error", detail: "DocEditor init failed: " + e.message}, "*");
+      }
+    };
+    script.onerror = function() {
+      err("Failed to load api.js from " + serverUrl);
+      parent.postMessage({type:"oo-error", detail: "Failed to load api.js from " + serverUrl}, "*");
+    };
+    document.head.appendChild(script);
+  } catch(e) {
+    err(e.message);
+    parent.postMessage({type:"oo-error", detail: e.message}, "*");
+  }
+})();
+</script>
+</body></html>"##;
+                let mut response = Response::from_string(editor_html)
+                    .with_status_code(StatusCode(200));
+                if let Ok(header) = Header::from_bytes("Content-Type", b"text/html; charset=utf-8") {
+                    response = response.with_header(header);
+                }
+                let _ = request.respond(response);
+                continue;
+            }
+
+            // ── /editor-config?id=XXX — return stored editor config JSON ──
+            if method == Method::Get && path.starts_with("/editor-config") {
+                let query_id = path.split("id=").nth(1).unwrap_or("").split('&').next().unwrap_or("");
+                let config_json = if !query_id.is_empty() {
+                    editor_config_store()
+                        .lock()
+                        .ok()
+                        .and_then(|store| store.get(query_id).cloned())
+                } else {
+                    None
+                };
+                match config_json {
+                    Some(json) => {
+                        let mut response = Response::from_string(json)
+                            .with_status_code(StatusCode(200));
+                        if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
+                            response = response.with_header(header);
+                        }
+                        let _ = request.respond(response);
+                    }
+                    None => {
+                        let _ = request.respond(
+                            Response::from_string(r#"{"error":"session not found or expired"}"#)
+                                .with_status_code(StatusCode(404)),
+                        );
+                    }
+                }
+                continue;
+            }
+
             if method != Method::Post || path != "/onlyoffice-callback" {
                 let _ = request.respond(
                     Response::from_string("not found")
@@ -1003,7 +1163,8 @@ pub fn run() {
             get_onlyoffice_relay_info,
             get_onlyoffice_relay_stats,
             set_onlyoffice_relay_auth,
-            fetch_text
+            fetch_text,
+            store_onlyoffice_editor_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

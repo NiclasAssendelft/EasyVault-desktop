@@ -705,6 +705,22 @@ const fi: Record<keyof typeof en, string> = {
   "importLinks.done": "Tuotu {{count}} linkkiä",
   "linkMenu.open": "Avaa selaimessa",
   "linkMenu.edit": "Muokkaa",
+
+  // Translate panel
+  "translate.button": "Käännä",
+  "translate.title": "Käännös",
+  "translate.targetLang": "Kohdekieli",
+  "translate.translate": "Käännä",
+  "translate.translating": "Käännetään...",
+  "translate.chunkProgress": "Käännetään osa {{current}}/{{total}}...",
+  "translate.extracting": "Poimitaan tekstiä...",
+  "translate.extractFailed": "Tekstin poiminta epäonnistui: {{error}}",
+  "translate.noText": "Ei käännettävää tekstisisältöä",
+  "translate.done": "Käännös valmis",
+  "translate.failed": "Käännös epäonnistui: {{error}}",
+  "translate.copy": "Kopioi",
+  "translate.copied": "Kopioitu!",
+  "translate.close": "Sulje",
 };
 
 export default fi;

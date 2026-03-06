@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { invokeEdgeFunction, listVersions } from "../api";
 import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeServerUrl } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useUiStore } from "../stores/uiStore";
 import { syncRemoteDelta } from "./deltaSyncService";
 import { asString } from "./helpers";
+import { invokeEdgeFunction } from "../api";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,79 +59,6 @@ export async function setupOnlyofficeLocalRelay(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Callback URL rewriting
-// ---------------------------------------------------------------------------
-
-export function rewriteOnlyofficeCallbackUrls(value: unknown): unknown {
-  const containerUrl = usePreviewEditStore.getState().onlyofficeRelayContainerCallbackUrl;
-
-  if (typeof value === "string") {
-    if (/^https?:\/\/(app\.base44\.com|easy-vault\.com)\/api\/apps\/[^/]+\/functions\/onlyofficeCallback\/?$/i.test(value)) {
-      return containerUrl;
-    }
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => rewriteOnlyofficeCallbackUrls(entry));
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = rewriteOnlyofficeCallbackUrls(v);
-    }
-    return out;
-  }
-  return value;
-}
-
-// ---------------------------------------------------------------------------
-// ONLYOFFICE API loader
-// ---------------------------------------------------------------------------
-
-export async function ensureOnlyofficeApi(documentServerUrl: string): Promise<void> {
-  const normalized = documentServerUrl.replace(/\/+$/, "");
-  const scriptUrl = `${normalized}/web-apps/apps/api/documents/api.js`;
-  const store = usePreviewEditStore.getState();
-
-  if (store.onlyofficeApiReady && store.onlyofficeApiScriptUrl === scriptUrl) return;
-
-  // Check if already loaded (e.g. from cache)
-  if ((window as unknown as { DocsAPI?: unknown }).DocsAPI) {
-    usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
-    return;
-  }
-
-  // WKWebView blocks external HTTP <script src> tags and XHR.
-  // Fetch via Rust backend (reqwest) and inject as inline script.
-  const scriptText = await invoke<string>("fetch_text", { url: scriptUrl });
-
-  // Protect Tauri globals from api.js overwrite.
-  // __TAURI_INTERNALS__ may be on the window prototype (WKWebView injection),
-  // so create a non-writable OWN property to shadow it and prevent deletion.
-  const w = window as unknown as Record<string, unknown>;
-  for (const key of ["__TAURI_INTERNALS__", "__TAURI__"] as const) {
-    const val = w[key];
-    if (val !== undefined) {
-      try {
-        Object.defineProperty(window, key, {
-          value: val, writable: false, configurable: false, enumerable: true,
-        });
-      } catch { /* already frozen */ }
-    }
-  }
-
-  const script = document.createElement("script");
-  script.textContent = scriptText;
-  document.head.appendChild(script);
-
-  if (!(window as unknown as { DocsAPI?: unknown }).DocsAPI) {
-    throw new Error("ONLYOFFICE API loaded but DocsAPI not found");
-  }
-
-  usePreviewEditStore.getState().setOnlyofficeApiReady(true, scriptUrl);
-}
-
-// ---------------------------------------------------------------------------
 // Relay polling
 // ---------------------------------------------------------------------------
 
@@ -182,10 +109,11 @@ export async function startOnlyofficeRelayPolling(): Promise<void> {
             const activeFileId = usePreviewEditStore.getState().onlyofficeActiveFileId;
             if (activeFileId) {
               try {
-                const versionToken = getPreferredUploadToken() || getAuthToken();
-                if (!versionToken) throw new Error("missing token for version check");
-                const versions = await listVersions(versionToken, activeFileId);
-                const newCount = Array.isArray(versions) ? versions.length : 0;
+                const versionsData = await invokeEdgeFunction<{ versions?: unknown[] }>("fileVersions", {
+                  fileId: activeFileId,
+                  action: "list",
+                });
+                const newCount = Array.isArray(versionsData.versions) ? versionsData.versions.length : 0;
                 const baseline = usePreviewEditStore.getState().onlyofficeBaselineVersionCount;
                 if (newCount > baseline) {
                   usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(newCount);
@@ -208,8 +136,16 @@ export async function startOnlyofficeRelayPolling(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Editor launch
+// Editor launch — cross-origin iframe via relay server
 // ---------------------------------------------------------------------------
+// ONLYOFFICE api.js wipes window.__TAURI_INTERNALS__ when loaded.
+// To prevent this, we serve the editor page from the local relay server
+// (http://localhost:17171) and load it in a cross-origin iframe.
+// Since http://localhost:17171 ≠ tauri://localhost, the browser's
+// Same-Origin Policy prevents api.js from accessing the parent window.
+// ---------------------------------------------------------------------------
+
+let _messageHandler: ((event: MessageEvent) => void) | null = null;
 
 export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
   const item = useFilesStore.getState().items.find((x) => x.id === fileId);
@@ -221,30 +157,35 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
   }
 
   setStatus("opening ONLYOFFICE...");
+  console.log(`ONLYOFFICE launch: fileId=${fileId} title="${item.title}" ext=${item.fileExtension || "?"}`);
 
   try {
     usePreviewEditStore.getState().setOnlyofficeActiveFileId(fileId);
 
     // Capture baseline version count
     try {
-      const versionToken = getPreferredUploadToken() || getAuthToken();
-      if (!versionToken) throw new Error("missing token for version baseline");
-      const versions = await listVersions(versionToken, fileId);
-      usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(Array.isArray(versions) ? versions.length : 0);
+      const versionsData = await invokeEdgeFunction<{ versions?: unknown[] }>("fileVersions", {
+        fileId,
+        action: "list",
+      });
+      usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(
+        Array.isArray(versionsData.versions) ? versionsData.versions.length : 0,
+      );
     } catch {
       usePreviewEditStore.getState().setOnlyofficeBaselineVersionCount(0);
     }
 
-    // Pass local relay callback URL so ONLYOFFICE calls back to the desktop
+    // Get editor session config from edge function
     const containerCallbackUrl = usePreviewEditStore.getState().onlyofficeRelayContainerCallbackUrl;
+    console.log("ONLYOFFICE: calling onlyofficeEditorSession edge function...");
     const payload = await invokeEdgeFunction<Record<string, unknown>>("onlyofficeEditorSession", {
       fileId,
       mode: "edit",
       callbackUrl: containerCallbackUrl,
       clientCallbackUrl: containerCallbackUrl,
     });
+    console.log("ONLYOFFICE: edge function returned:", JSON.stringify(payload).slice(0, 200));
 
-    // The server returns the FINAL config with JWT already signed — pass through as-is
     const serverConfig = (payload.config as Record<string, unknown>) || {};
 
     // Resolve ONLYOFFICE document server URL
@@ -256,8 +197,21 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     if (!configuredServerUrl && documentServerUrl.includes("host.docker.internal")) {
       documentServerUrl = documentServerUrl.replace("host.docker.internal", "localhost");
     }
+    console.log("ONLYOFFICE: document server URL:", documentServerUrl);
 
-    await ensureOnlyofficeApi(documentServerUrl);
+    // Store config in Rust relay server for the editor page to fetch
+    const configForRelay = JSON.stringify({
+      documentServerUrl,
+      config: serverConfig,
+    });
+    const sessionId = await invoke<string>("store_onlyoffice_editor_config", {
+      configJson: configForRelay,
+    });
+    console.log("ONLYOFFICE: stored config with session ID:", sessionId);
+
+    // Get relay port from relay info
+    const relayInfo = await invoke<{ port?: number }>("get_onlyoffice_relay_info");
+    const relayPort = relayInfo?.port || 17171;
 
     // Find or create host element
     let hostEl = document.getElementById("onlyoffice-editor-host");
@@ -268,51 +222,99 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
       hostEl.style.cssText = "height:100%;width:100%;min-height:600px;";
       document.body.appendChild(hostEl);
     }
+    hostEl.innerHTML = "";
 
-    // Destroy any previous editor
-    const prev = usePreviewEditStore.getState().onlyofficeEditorInstance;
-    if (prev?.destroy) {
-      try { prev.destroy(); } catch { /* ignore */ }
+    // Create cross-origin iframe pointing to the relay server
+    const iframe = document.createElement("iframe");
+    iframe.id = "onlyoffice-editor-iframe";
+    iframe.style.cssText = "width:100%;height:100%;border:none;";
+    const iframeSrc = `http://localhost:${relayPort}/editor?id=${encodeURIComponent(sessionId)}`;
+    console.log("ONLYOFFICE: loading iframe from:", iframeSrc);
+    iframe.src = iframeSrc;
+    hostEl.appendChild(iframe);
+
+    // Listen for postMessage events from the editor iframe
+    if (_messageHandler) {
+      window.removeEventListener("message", _messageHandler);
     }
+    _messageHandler = (event: MessageEvent) => {
+      // Only accept messages from our relay server
+      if (!event.origin.includes(`localhost:${relayPort}`)) return;
+      const data = event.data as { type?: string; detail?: unknown } | undefined;
+      if (!data?.type) return;
 
-    const DocsAPI = (window as unknown as { DocsAPI?: { DocEditor: new (id: string, config: unknown) => { destroy?: () => void } } }).DocsAPI;
-    if (!DocsAPI?.DocEditor) {
-      throw new Error("ONLYOFFICE API is not available");
-    }
-
-    // Pass server config through, only add UI-level fields (width/height/events)
-    const editorConfig = {
-      ...serverConfig,
-      width: "100%",
-      height: "100%",
-      events: {
-        onAppReady: () => { setStatus(""); console.log(`ONLYOFFICE ready: ${item.title}`); },
-        onDocumentStateChange: () => {},
-        onError: (evt: unknown) => {
-          console.error("ONLYOFFICE onError:", JSON.stringify(evt));
-          window.alert(`ONLYOFFICE error: ${JSON.stringify(evt)}`);
-        },
-        onWarning: (evt: unknown) => {
-          console.warn("ONLYOFFICE onWarning:", JSON.stringify(evt));
-        },
-        onRequestClose: () => {
+      switch (data.type) {
+        case "oo-ready":
+          setStatus("");
+          console.log(`ONLYOFFICE ready: ${item.title}`);
+          break;
+        case "oo-mounted":
+          console.log("ONLYOFFICE: editor mounted in cross-origin iframe");
+          break;
+        case "oo-error":
+          console.error("ONLYOFFICE iframe error:", data.detail);
+          setStatus(`ONLYOFFICE error: ${String(data.detail)}`);
+          // Close editor panel so files aren't hidden behind blank overlay
+          usePreviewEditStore.getState().close();
+          break;
+        case "oo-warning":
+          console.warn("ONLYOFFICE warning:", data.detail);
+          break;
+        case "oo-close":
           setStatus("");
           stopOnlyofficeRelayPolling();
           void syncRemoteDelta();
-        },
-      },
+          break;
+      }
     };
+    window.addEventListener("message", _messageHandler);
 
-    const editorInstance = new DocsAPI.DocEditor("onlyoffice-editor-host", editorConfig);
-    usePreviewEditStore.getState().setOnlyofficeEditor(editorInstance);
+    // Store a reference so close() can clean up the iframe
+    usePreviewEditStore.getState().setOnlyofficeEditor({
+      destroy: () => {
+        if (_messageHandler) {
+          window.removeEventListener("message", _messageHandler);
+          _messageHandler = null;
+        }
+        const el = document.getElementById("onlyoffice-editor-iframe");
+        if (el) el.remove();
+      },
+    });
 
     // Force relayout for ONLYOFFICE inside modals
     window.setTimeout(() => { window.dispatchEvent(new Event("resize")); }, 50);
     window.setTimeout(() => { window.dispatchEvent(new Event("resize")); }, 250);
 
-    console.log("ONLYOFFICE: editor mounted");
+    // Timeout: if editor doesn't become ready in 20s, show error
+    let editorReady = false;
+    const origHandler = _messageHandler;
+    if (origHandler) {
+      const wrappedHandler = (event: MessageEvent) => {
+        origHandler(event);
+        const data = event.data as { type?: string } | undefined;
+        if (data?.type === "oo-ready" || data?.type === "oo-mounted") {
+          editorReady = true;
+        }
+      };
+      window.removeEventListener("message", origHandler);
+      _messageHandler = wrappedHandler;
+      window.addEventListener("message", wrappedHandler);
+    }
+    window.setTimeout(() => {
+      if (!editorReady) {
+        console.warn("ONLYOFFICE: editor did not become ready within 20s");
+        setStatus("ONLYOFFICE editor timed out — check if the server is reachable");
+        // Close the editor panel so files aren't hidden behind a blank overlay
+        usePreviewEditStore.getState().close();
+      }
+    }, 20000);
+
+    console.log("ONLYOFFICE: cross-origin iframe created, loading editor...");
     await startOnlyofficeRelayPolling();
   } catch (err) {
-    setStatus(`ONLYOFFICE launch failed: ${String(err)}`);
+    console.error(`ONLYOFFICE launch failed for fileId=${fileId}:`, err);
+    setStatus(`ONLYOFFICE failed: ${String(err)}`);
+    // Close the editor panel so files aren't hidden behind the overlay
+    usePreviewEditStore.getState().close();
   }
 }
