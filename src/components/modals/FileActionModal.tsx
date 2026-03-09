@@ -56,14 +56,6 @@ export default function FileActionModal() {
     useFilesStore.getState().persist();
   }
 
-  function handlePreview() {
-    if (!item) return;
-    close();
-    usePreviewEditStore.getState().open(item.id, "preview", kind, canEdit, {
-      noteDraft: item.contentText || item.notes, linkUrlDraft: item.sourceUrl || "", linkNotesDraft: item.notes,
-    });
-  }
-
   async function handleOpenNative() {
     if (!item) return;
     const previewUrl = getPreviewUrlForItem(item);
@@ -103,7 +95,6 @@ export default function FileActionModal() {
         </div>
         {status && <p className="files-scope-label">{status}</p>}
         <div className="file-action-list">
-          <button type="button" className="ghost" onClick={handlePreview}>{t("fileAction.preview")}</button>
           <button type="button" className="ghost" onClick={handleOpenNative}>{t("fileAction.openNative")}</button>
           <button type="button" className="ghost" onClick={handleEditInApp}>{t("fileAction.editInApp")}</button>
           <button type="button" className="ghost" onClick={handleManage} disabled={!canEdit}>{t("fileAction.manage")}</button>
