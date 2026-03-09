@@ -601,6 +601,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 20px 0 8px;
 }
 .section-label-row .section-label {
   margin: 0;
@@ -1050,7 +1051,6 @@ select {
 
 .folder-card {
   position: relative;
-  z-index: 0;
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   background: var(--glass);
@@ -1218,7 +1218,6 @@ select {
 
 .file-row {
   position: relative;
-  z-index: 0;
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   background: var(--glass);
