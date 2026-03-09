@@ -207,7 +207,6 @@ export default function FilesTab() {
             ⌂ <span>›</span> <span>{activeFolder.name}</span>
           </div>
           <div className="actions-row file-head-actions">
-            <button type="button" className={`ghost${selectMode ? " active" : ""}`} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>{t("files.select")}</button>
             <button type="button" className="ghost" onClick={handleUpload}>{t("files.upload")}</button>
             <button type="button" onClick={openNewModal}>{t("files.new")}</button>
           </div>
@@ -217,7 +216,10 @@ export default function FilesTab() {
             {t("files.back")}
           </button>
         </div>
-        <h2 className="files-folder-page-title">{activeFolder.name}</h2>
+        <div className="section-label-row">
+          <h2 className="files-folder-page-title">{activeFolder.name}</h2>
+          <button type="button" className={`ghost${selectMode ? " active" : ""}`} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>{t("files.select")}</button>
+        </div>
         <div className="files-items">
           {visibleItems.length === 0 ? (
             <div className="dash-card"><p>{t("files.noItemsInFolder")}</p></div>
@@ -246,7 +248,6 @@ export default function FilesTab() {
           <p className="page-subtitle">{t("files.subtitle")}</p>
         </div>
         <div className="actions-row file-head-actions">
-          <button type="button" className={`ghost${selectMode ? " active" : ""}`} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>{t("files.select")}</button>
           <button type="button" className="ghost" onClick={handleUpload}>{t("files.upload")}</button>
           <button type="button" onClick={openNewModal}>{t("files.new")}</button>
         </div>
@@ -335,7 +336,10 @@ export default function FilesTab() {
             </div>
           </>
         )}
-        <h4 className="section-label">{t("files.files")}</h4>
+        <div className="section-label-row">
+          <h4 className="section-label">{t("files.files")}</h4>
+          <button type="button" className={`ghost${selectMode ? " active" : ""}`} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>{t("files.select")}</button>
+        </div>
         <div className="files-items">
           {visibleItems.length === 0 ? (
             <div className="dash-card"><p>{t("files.noItems")}</p></div>

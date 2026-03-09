@@ -597,6 +597,15 @@ h1 {
   font-weight: 560;
 }
 
+.section-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.section-label-row .section-label {
+  margin: 0;
+}
+
 .vault-switch {
   display: inline-flex;
   align-items: center;
@@ -1172,6 +1181,9 @@ select {
   letter-spacing: -0.03em;
   color: #fff;
 }
+.section-label-row .files-folder-page-title {
+  margin: 0;
+}
 
 .files-empty-state {
   min-height: 440px;
@@ -1223,7 +1235,6 @@ select {
 .file-row:hover {
   border-color: rgba(108, 71, 255, 0.15);
   background: rgba(20, 20, 32, 0.85);
-  transform: translateY(-1px);
   box-shadow: 0 4px 20px rgba(108, 71, 255, 0.06);
 }
 
@@ -1341,8 +1352,9 @@ select {
   place-items: center;
   line-height: 1;
   font-size: 16px;
-  opacity: 0;
+  opacity: 0.4;
   transition: opacity 0.15s ease;
+  cursor: pointer;
 }
 
 .group:hover .row-menu-btn,

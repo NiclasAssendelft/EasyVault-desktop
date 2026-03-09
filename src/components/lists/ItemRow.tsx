@@ -75,6 +75,7 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
   const openManageModal = useUiStore((s) => s.openManageModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const cfg = getIconConfig(item);
@@ -125,10 +126,14 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
       <div className="row-menu">
         <button ref={btnRef} className="row-menu-btn" onClick={(e) => {
           e.stopPropagation();
+          if (!menuOpen && btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+          }
           setMenuOpen(!menuOpen);
         }}>&#x22EE;</button>
         {menuOpen && (
-          <div ref={menuRef} className="row-menu-dropdown open">
+          <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, left: "auto" }}>
             <button onClick={(e) => {
               e.stopPropagation();
               const next = !item.isPinned;
