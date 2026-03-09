@@ -9,6 +9,7 @@ import {
   refreshDropzoneFromRemote,
 } from "../services/deltaSyncService";
 import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/onlyofficeService";
+import { check } from "@tauri-apps/plugin-updater";
 import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
 import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
@@ -126,6 +127,24 @@ export default function WorkspaceLayout() {
     return () => {
       delete (window as unknown as { EasyVaultEditors?: unknown }).EasyVaultEditors;
     };
+  }, []);
+
+  // Check for app updates on startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const update = await check();
+        if (update) {
+          const yes = window.confirm(`EasyVault ${update.version} is available. Download and install?`);
+          if (yes) {
+            await update.downloadAndInstall();
+            window.alert("Update installed. Please restart EasyVault to use the new version.");
+          }
+        }
+      } catch (e) {
+        console.warn("Update check failed:", e);
+      }
+    })();
   }, []);
 
   // Start/stop watch folder polling
