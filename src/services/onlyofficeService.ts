@@ -176,13 +176,18 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     }
 
     // Get editor session config from edge function
-    const containerCallbackUrl = usePreviewEditStore.getState().onlyofficeRelayContainerCallbackUrl;
+    // Only send the local relay callback URL if the ONLYOFFICE server is on localhost.
+    // Remote servers can't reach the user's local relay — use Supabase callback instead.
+    const configuredUrl = getOnlyofficeServerUrl();
+    const isLocalOO = !configuredUrl || configuredUrl.includes("localhost") || configuredUrl.includes("127.0.0.1");
+    const containerCallbackUrl = isLocalOO
+      ? usePreviewEditStore.getState().onlyofficeRelayContainerCallbackUrl
+      : undefined;
     console.log("ONLYOFFICE: calling onlyofficeEditorSession edge function...");
     const payload = await invokeEdgeFunction<Record<string, unknown>>("onlyofficeEditorSession", {
       fileId,
       mode: "edit",
-      callbackUrl: containerCallbackUrl,
-      clientCallbackUrl: containerCallbackUrl,
+      ...(containerCallbackUrl ? { callbackUrl: containerCallbackUrl, clientCallbackUrl: containerCallbackUrl } : {}),
     });
     console.log("ONLYOFFICE: edge function returned:", JSON.stringify(payload).slice(0, 200));
 
