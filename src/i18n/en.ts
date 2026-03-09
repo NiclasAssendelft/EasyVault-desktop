@@ -116,6 +116,17 @@ const en = {
   "files.catShared": "Shared",
   "files.catItems": "items",
   "files.catPinned": "Pinned",
+  "files.select": "Select",
+  "files.selectAll": "Select all",
+  "files.cancel": "Cancel",
+  "files.deleteSelected": "Delete ({{count}})",
+  "files.moveSelected": "Move to...",
+  "files.deleting": "Deleting...",
+  "files.moving": "Moving...",
+  "files.bulkDeleteDone": "Deleted {{count}} items",
+  "files.bulkMoveDone": "Moved {{count}} items",
+  "files.moveTo": "Move to:",
+  "files.rootLevel": "Root (no folder)",
 
   // EmailTab
   "email.connectTitle": "Connect Your Email",

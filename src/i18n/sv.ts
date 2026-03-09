@@ -116,6 +116,17 @@ const sv: Record<keyof typeof en, string> = {
   "files.catShared": "Delade",
   "files.catItems": "objekt",
   "files.catPinned": "Fästa",
+  "files.select": "Välj",
+  "files.selectAll": "Välj alla",
+  "files.cancel": "Avbryt",
+  "files.deleteSelected": "Ta bort ({{count}})",
+  "files.moveSelected": "Flytta till...",
+  "files.deleting": "Tar bort...",
+  "files.moving": "Flyttar...",
+  "files.bulkDeleteDone": "{{count}} objekt borttagna",
+  "files.bulkMoveDone": "{{count}} objekt flyttade",
+  "files.moveTo": "Flytta till:",
+  "files.rootLevel": "Rot (ingen mapp)",
 
   // EmailTab
   "email.connectTitle": "Anslut din e-post",

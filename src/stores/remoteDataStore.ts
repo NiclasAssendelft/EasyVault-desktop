@@ -1,4 +1,8 @@
 import { create } from "zustand";
+import { loadJson } from "../services/helpers";
+
+const EVENTS_CACHE_KEY = "ev.remote.events";
+const EMAILS_CACHE_KEY = "ev.remote.emails";
 
 interface RemoteDataState {
   emails: Record<string, unknown>[];
@@ -14,13 +18,19 @@ interface RemoteDataState {
 }
 
 export const useRemoteDataStore = create<RemoteDataState>((set) => ({
-  emails: [],
-  events: [],
+  emails: loadJson<Record<string, unknown>[]>(EMAILS_CACHE_KEY, []),
+  events: loadJson<Record<string, unknown>[]>(EVENTS_CACHE_KEY, []),
   packs: [],
   spaces: [],
   dropzoneItems: [],
-  setEmails: (data) => set({ emails: data }),
-  setEvents: (data) => set({ events: data }),
+  setEmails: (data) => {
+    set({ emails: data });
+    try { localStorage.setItem(EMAILS_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+  },
+  setEvents: (data) => {
+    set({ events: data });
+    try { localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+  },
   setPacks: (data) => set({ packs: data }),
   setSpaces: (data) => set({ spaces: data }),
   setDropzoneItems: (data) => set({ dropzoneItems: data }),

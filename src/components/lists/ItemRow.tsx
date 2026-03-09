@@ -8,6 +8,9 @@ import { useT } from "../../i18n";
 
 interface Props {
   item: DesktopItem;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 // Extension → icon config (macOS-style colored doc badges)
@@ -67,7 +70,7 @@ function fileExtLabel(item: DesktopItem): string | null {
   return ext.length > 0 && ext.length <= 5 ? `.${ext}` : null;
 }
 
-export default function ItemRow({ item }: Props) {
+export default function ItemRow({ item, selectMode, selected, onToggleSelect }: Props) {
   const setFileActionTargetId = useUiStore((s) => s.setFileActionTargetId);
   const openManageModal = useUiStore((s) => s.openManageModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
@@ -90,7 +93,19 @@ export default function ItemRow({ item }: Props) {
   }, [menuOpen]);
 
   return (
-    <article className="file-row group" onClick={() => setFileActionTargetId(item.id)}>
+    <article className={`file-row group${selected ? " file-row-selected" : ""}`} onClick={() => {
+      if (selectMode && onToggleSelect) { onToggleSelect(item.id); return; }
+      setFileActionTargetId(item.id);
+    }}>
+      {selectMode && (
+        <input
+          type="checkbox"
+          className="file-select-check"
+          checked={!!selected}
+          onChange={() => onToggleSelect?.(item.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <div className="file-type-badge" style={{ background: cfg.color }}>
         {cfg.label}
       </div>

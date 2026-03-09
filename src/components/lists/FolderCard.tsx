@@ -9,9 +9,12 @@ import { useT } from "../../i18n";
 interface Props {
   folder: DesktopFolder;
   onClick: () => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-export default function FolderCard({ folder, onClick }: Props) {
+export default function FolderCard({ folder, onClick, selectMode, selected, onToggleSelect }: Props) {
   const openManageModal = useUiStore((s) => s.openManageModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,9 +35,21 @@ export default function FolderCard({ folder, onClick }: Props) {
 
   return (
     <article
-      className={`folder-card group${folder.isPinned ? " folder-pinned" : ""}`}
-      onClick={onClick}
+      className={`folder-card group${folder.isPinned ? " folder-pinned" : ""}${selected ? " file-row-selected" : ""}`}
+      onClick={() => {
+        if (selectMode && onToggleSelect) { onToggleSelect(folder.id); return; }
+        onClick();
+      }}
     >
+      {selectMode && (
+        <input
+          type="checkbox"
+          className="file-select-check"
+          checked={!!selected}
+          onChange={() => onToggleSelect?.(folder.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <div className="folder-icon-box">📁</div>
       <div className="folder-card-body">
         <p className="folder-card-name">

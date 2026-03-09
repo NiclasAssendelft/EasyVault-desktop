@@ -44,6 +44,7 @@ const TAB_COMPONENTS = {
 } as const;
 
 const TAB_REFRESH: Partial<Record<keyof typeof TAB_COMPONENTS, () => Promise<void>>> = {
+  home: refreshCalendarFromRemote,
   files: refreshFilesFromRemote,
   links: refreshFilesFromRemote,
   email: refreshEmailFromRemote,

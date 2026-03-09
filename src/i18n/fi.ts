@@ -116,6 +116,17 @@ const fi: Record<keyof typeof en, string> = {
   "files.catShared": "Jaetut",
   "files.catItems": "kohdetta",
   "files.catPinned": "Kiinnitetyt",
+  "files.select": "Valitse",
+  "files.selectAll": "Valitse kaikki",
+  "files.cancel": "Peruuta",
+  "files.deleteSelected": "Poista ({{count}})",
+  "files.moveSelected": "Siirrä...",
+  "files.deleting": "Poistetaan...",
+  "files.moving": "Siirretään...",
+  "files.bulkDeleteDone": "{{count}} kohdetta poistettu",
+  "files.bulkMoveDone": "{{count}} kohdetta siirretty",
+  "files.moveTo": "Siirrä kohteeseen:",
+  "files.rootLevel": "Juuri (ei kansiota)",
 
   // EmailTab
   "email.connectTitle": "Yhdistä sähköpostisi",

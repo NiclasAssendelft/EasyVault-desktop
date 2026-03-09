@@ -81,7 +81,7 @@ export function saveUploadedWatchSignatures(signatures: Set<string>): void {
 }
 
 export function getOnlyofficeJwtSecret(): string {
-  return localStorage.getItem(STORAGE_KEYS.onlyofficeJwtSecret) || "";
+  return localStorage.getItem(STORAGE_KEYS.onlyofficeJwtSecret) || "ev-oo-jwt-8491fda228f7c788ae2ee056155bbcd0";
 }
 
 export function setOnlyofficeJwtSecret(secret: string): void {
@@ -93,7 +93,7 @@ export function setOnlyofficeJwtSecret(secret: string): void {
 }
 
 export function getOnlyofficeServerUrl(): string {
-  return localStorage.getItem(STORAGE_KEYS.onlyofficeServerUrl) || "";
+  return localStorage.getItem(STORAGE_KEYS.onlyofficeServerUrl) || "http://89.167.67.171:8080";
 }
 
 export function setOnlyofficeServerUrl(url: string): void {
