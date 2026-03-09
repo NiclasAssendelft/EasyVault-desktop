@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { DesktopFolder } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
 import { useFilesStore } from "../../stores/filesStore";
@@ -69,7 +70,7 @@ export default function FolderCard({ folder, onClick, selectMode, selected, onTo
           }
           setMenuOpen(!menuOpen);
         }}>&#x22EE;</button>
-        {menuOpen && (
+        {menuOpen && createPortal(
           <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, left: "auto" }}>
             <button onClick={(e) => {
               e.stopPropagation();
@@ -82,7 +83,8 @@ export default function FolderCard({ folder, onClick, selectMode, selected, onTo
             <button onClick={(e) => { e.stopPropagation(); openManageModal({ kind: "folder", id: folder.id, entity: "Folder" }, folder.createdAtIso); setMenuOpen(false); }}>{t("menu.manage")}</button>
             <hr />
             <button className="danger" onClick={(e) => { e.stopPropagation(); openDeleteModal({ kind: "folder", id: folder.id, entity: "Folder" }); setMenuOpen(false); }}>{t("menu.delete")}</button>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </article>

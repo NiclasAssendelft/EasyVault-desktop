@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { DesktopItem } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
 import { useFilesStore } from "../../stores/filesStore";
@@ -132,7 +133,7 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
           }
           setMenuOpen(!menuOpen);
         }}>&#x22EE;</button>
-        {menuOpen && (
+        {menuOpen && createPortal(
           <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, left: "auto" }}>
             <button onClick={(e) => {
               e.stopPropagation();
@@ -145,7 +146,8 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
             <button onClick={(e) => { e.stopPropagation(); openManageModal({ kind: "item", id: item.id, entity: "VaultItem" }, item.updatedAtIso || item.createdAtIso); setMenuOpen(false); }}>{t("menu.manage")}</button>
             <hr />
             <button className="danger" onClick={(e) => { e.stopPropagation(); openDeleteModal({ kind: "item", id: item.id, entity: "VaultItem" }); setMenuOpen(false); }}>{t("menu.delete")}</button>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </article>
