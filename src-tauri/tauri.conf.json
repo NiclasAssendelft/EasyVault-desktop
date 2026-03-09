@@ -40,7 +40,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/NiclasAssendelft/EasyVault-desktop/releases/latest/download/latest.json"
+        "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/desktop-update"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4QTBCOUJGMEJGNjdEQjcKUldTM2ZmWUx2N21nK0Z4YVg5WDZVOWVGbXpuenRNcTVBbmFlVDZWUkE4MTNDQ0NBRGRhU085TEsK"
     }
