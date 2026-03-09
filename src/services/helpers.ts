@@ -201,18 +201,6 @@ export function toAdapterItem(item: DesktopItem): AdapterItem {
   };
 }
 
-export function semverAtLeast(version: string, minimum: string): boolean {
-  const a = version.split(".").map((p) => Number(p));
-  const b = minimum.split(".").map((p) => Number(p));
-  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-    const av = Number.isFinite(a[i]) ? a[i] : 0;
-    const bv = Number.isFinite(b[i]) ? b[i] : 0;
-    if (av > bv) return true;
-    if (av < bv) return false;
-  }
-  return true;
-}
-
 export function isNotFoundError(err: unknown): boolean {
   const msg = String(err).toLowerCase();
   return msg.includes("request failed (404)") || msg.includes("record not found") || msg.includes("not found");
@@ -247,42 +235,6 @@ export function sleep(ms: number): Promise<void> {
 
 export function fileSignature(name: string, size: number): string {
   return `${name}|${size}`;
-}
-
-// ─── JWT helpers (for ONLYOFFICE) ────────────────────────────────────────────
-
-export function base64UrlEncode(input: Uint8Array): string {
-  let raw = "";
-  for (let i = 0; i < input.length; i += 1) raw += String.fromCharCode(input[i]);
-  return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-export function jsonBase64Url(value: unknown): string {
-  return base64UrlEncode(new TextEncoder().encode(JSON.stringify(value)));
-}
-
-export async function hmacSha256Base64Url(message: string, secret: string): Promise<string> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return base64UrlEncode(new Uint8Array(sig));
-}
-
-export async function signOnlyofficeConfigToken(config: Record<string, unknown>, secret: string): Promise<string> {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const payload = { ...config, iat: now, exp: now + 3600 };
-  delete (payload as { token?: unknown }).token;
-  const headerB64 = jsonBase64Url(header);
-  const payloadB64 = jsonBase64Url(payload);
-  const signingInput = `${headerB64}.${payloadB64}`;
-  const signature = await hmacSha256Base64Url(signingInput, secret);
-  return `${signingInput}.${signature}`;
 }
 
 export function getPreviewUrlForItem(item: DesktopItem | AdapterItem): string {

@@ -1,6 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { openPath } from "@tauri-apps/plugin-opener";
-import { uploadFileWithToken, downloadFile } from "../api";
+import { uploadFileWithToken } from "../api";
 import { getPreferredUploadToken } from "../storage";
 import { useFilesStore } from "../stores/filesStore";
 import { useAuthStore } from "../stores/authStore";
@@ -8,7 +6,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useSyncStore } from "../stores/syncStore";
 import { safeEntityCreate, canUseRemoteData } from "./entityService";
 import { refreshAccessScope, syncRemoteDelta, refreshFilesFromRemote } from "./deltaSyncService";
-import { normalizeItem, extOf, asString, asArray, asBool, type FileItemType, type DesktopItem } from "./helpers";
+import { normalizeItem, extOf, asString, asArray, asBool, type FileItemType } from "./helpers";
 
 export async function uploadSelectedFilesToFolder(targetFolderId: string, preSuppliedFiles?: File[]): Promise<void> {
   // Check auth
@@ -201,17 +199,3 @@ export async function uploadSelectedFilesToSpace(spaceId: string, preSuppliedFil
   }
 }
 
-export async function openNativeForItem(item: DesktopItem): Promise<void> {
-  if (item.localPath) {
-    await openPath(item.localPath);
-    return;
-  }
-  if (!item.storedFileUrl) throw new Error("No stored file URL available");
-  const bytes = await downloadFile(item.storedFileUrl);
-  const savedPath = await invoke<string>("save_file_to_workspace", {
-    fileId: item.id,
-    filename: item.title || `${item.id}.${item.fileExtension || "bin"}`,
-    bytes: Array.from(bytes),
-  });
-  await openPath(savedPath);
-}
