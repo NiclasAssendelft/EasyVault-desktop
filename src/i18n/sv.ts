@@ -148,6 +148,7 @@ const sv: Record<keyof typeof en, string> = {
   "email.syncingOutlook": "Synkroniserar Outlook...",
   "email.outlookSynced": "Outlook synkroniserad",
   "email.outlookFailed": "Outlook-synkronisering misslyckades: {{error}}",
+  "email.outlookNotConnected": "Outlook ej ansluten — gå till Inställningar för att ansluta ditt konto",
   "email.searchPlaceholder": "Sök e-post...",
   "email.noSelection": "Välj ett e-postmeddelande att läsa",
   "email.from": "Från",
@@ -376,6 +377,15 @@ const sv: Record<keyof typeof en, string> = {
   "settings.unsupportedFields": "--- Ej stödda fält ---",
   "settings.none": "inga",
   "settings.notLoaded": "ej laddade",
+  "settings.outlookTitle": "Outlook",
+  "settings.outlookDesc": "Anslut ditt Microsoft Outlook-konto för att synka e-post och kalenderhändelser.",
+  "settings.outlookConnect": "Anslut Outlook",
+  "settings.outlookDisconnect": "Koppla från",
+  "settings.outlookConnectedLabel": "Ansluten",
+  "settings.outlookOpened": "Microsoft-inloggning öppnad i webbläsaren",
+  "settings.outlookConnectFailed": "Kunde inte ansluta Outlook: {{error}}",
+  "settings.outlookDisconnected": "Outlook frånkopplad",
+  "settings.outlookDisconnectFailed": "Kunde inte koppla från Outlook: {{error}}",
 
   // NewModal
   "new.titleFolder": "Ny mapp",

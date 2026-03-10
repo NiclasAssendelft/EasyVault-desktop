@@ -148,6 +148,7 @@ const fi: Record<keyof typeof en, string> = {
   "email.syncingOutlook": "Synkronoidaan Outlook...",
   "email.outlookSynced": "Outlook synkronoitu",
   "email.outlookFailed": "Outlook-synkronointi epäonnistui: {{error}}",
+  "email.outlookNotConnected": "Outlook ei yhdistetty — siirry Asetuksiin yhdistääksesi tilisi",
   "email.searchPlaceholder": "Hae sähköposteja...",
   "email.noSelection": "Valitse sähköposti luettavaksi",
   "email.from": "Lähettäjä",
@@ -376,6 +377,15 @@ const fi: Record<keyof typeof en, string> = {
   "settings.unsupportedFields": "--- Tukemattomat kentät ---",
   "settings.none": "ei mitään",
   "settings.notLoaded": "ei ladattu",
+  "settings.outlookTitle": "Outlook",
+  "settings.outlookDesc": "Yhdistä Microsoft Outlook -tilisi synkronoidaksesi sähköpostit ja kalenteritapahtumat.",
+  "settings.outlookConnect": "Yhdistä Outlook",
+  "settings.outlookDisconnect": "Katkaise yhteys",
+  "settings.outlookConnectedLabel": "Yhdistetty",
+  "settings.outlookOpened": "Microsoft-kirjautuminen avattu selaimessa",
+  "settings.outlookConnectFailed": "Outlook-yhdistäminen epäonnistui: {{error}}",
+  "settings.outlookDisconnected": "Outlook-yhteys katkaistu",
+  "settings.outlookDisconnectFailed": "Outlook-yhteyden katkaiseminen epäonnistui: {{error}}",
 
   // NewModal
   "new.titleFolder": "Uusi kansio",

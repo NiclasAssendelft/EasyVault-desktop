@@ -148,6 +148,7 @@ const en = {
   "email.syncingOutlook": "Syncing Outlook...",
   "email.outlookSynced": "Outlook synced",
   "email.outlookFailed": "Outlook sync failed: {{error}}",
+  "email.outlookNotConnected": "Outlook not connected — go to Settings to connect your account",
   "email.searchPlaceholder": "Search emails...",
   "email.noSelection": "Select an email to read",
   "email.from": "From",
@@ -376,6 +377,15 @@ const en = {
   "settings.unsupportedFields": "--- Unsupported fields ---",
   "settings.none": "none",
   "settings.notLoaded": "not loaded",
+  "settings.outlookTitle": "Outlook",
+  "settings.outlookDesc": "Connect your Microsoft Outlook account to sync emails and calendar events.",
+  "settings.outlookConnect": "Connect Outlook",
+  "settings.outlookDisconnect": "Disconnect",
+  "settings.outlookConnectedLabel": "Connected",
+  "settings.outlookOpened": "Microsoft login opened in browser",
+  "settings.outlookConnectFailed": "Failed to connect Outlook: {{error}}",
+  "settings.outlookDisconnected": "Outlook disconnected",
+  "settings.outlookDisconnectFailed": "Failed to disconnect Outlook: {{error}}",
 
   // NewModal
   "new.titleFolder": "New Folder",

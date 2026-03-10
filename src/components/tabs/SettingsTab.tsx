@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAuthStore } from "../../stores/authStore";
 import { useFilesStore } from "../../stores/filesStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
@@ -13,6 +13,8 @@ import {
 } from "../../storage";
 import { canUseRemoteData } from "../../services/entityService";
 import { refreshAllRemoteData } from "../../services/deltaSyncService";
+import { invokeEdgeFunction } from "../../api";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useT, t } from "../../i18n";
 
 export default function SettingsTab() {
@@ -31,10 +33,50 @@ export default function SettingsTab() {
   const [showJwt, setShowJwt] = useState(false);
   const [report, setReport] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
+  const [outlookConnected, setOutlookConnected] = useState<boolean | null>(null);
+  const [outlookLoading, setOutlookLoading] = useState(false);
 
   const displayName = useMemo(() => toDisplayName(email || getSavedEmail()), [email]);
   const displayEmail = email || getSavedEmail() || "-";
   const avatarLetter = displayName.charAt(0).toUpperCase() || "U";
+
+  // Check Outlook connection status on mount
+  useEffect(() => {
+    invokeEdgeFunction("outlookStatus", {})
+      .then((res: unknown) => {
+        const r = res as { connected?: boolean };
+        setOutlookConnected(r.connected === true);
+      })
+      .catch(() => setOutlookConnected(false));
+  }, []);
+
+  const handleConnectOutlook = useCallback(async () => {
+    setOutlookLoading(true);
+    try {
+      const res = await invokeEdgeFunction("outlookOauthStart", {}) as { url?: string };
+      if (res.url) {
+        await openUrl(res.url);
+        setStatus(t("settings.outlookOpened"));
+      }
+    } catch (err) {
+      setStatus(t("settings.outlookConnectFailed", { error: String(err) }));
+    } finally {
+      setOutlookLoading(false);
+    }
+  }, [setStatus]);
+
+  const handleDisconnectOutlook = useCallback(async () => {
+    setOutlookLoading(true);
+    try {
+      await invokeEdgeFunction("outlookDisconnect", {});
+      setOutlookConnected(false);
+      setStatus(t("settings.outlookDisconnected"));
+    } catch (err) {
+      setStatus(t("settings.outlookDisconnectFailed", { error: String(err) }));
+    } finally {
+      setOutlookLoading(false);
+    }
+  }, [setStatus]);
 
   const handleSave = useCallback(
     (e: React.FormEvent) => {
@@ -169,6 +211,29 @@ export default function SettingsTab() {
 
           <button type="submit">{tr("settings.save")}</button>
         </form>
+      </div>
+
+      <div className="dash-card">
+        <h4>{tr("settings.outlookTitle")}</h4>
+        <p style={{ color: "#71717a", fontSize: 13, marginBottom: 12 }}>
+          {tr("settings.outlookDesc")}
+        </p>
+        {outlookConnected === null ? (
+          <p style={{ color: "#71717a", fontSize: 13 }}>{tr("settings.checking")}</p>
+        ) : outlookConnected ? (
+          <div className="actions-row">
+            <span style={{ color: "#059669", fontWeight: 500, fontSize: 13, marginRight: 12 }}>
+              &#x2713; {tr("settings.outlookConnectedLabel")}
+            </span>
+            <button type="button" className="ghost" onClick={handleDisconnectOutlook} disabled={outlookLoading}>
+              {outlookLoading ? tr("settings.checking") : tr("settings.outlookDisconnect")}
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={handleConnectOutlook} disabled={outlookLoading}>
+            {outlookLoading ? tr("settings.checking") : tr("settings.outlookConnect")}
+          </button>
+        )}
       </div>
 
       <div className="dash-card">

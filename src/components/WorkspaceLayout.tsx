@@ -11,6 +11,8 @@ import {
 import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/onlyofficeService";
 import { check } from "@tauri-apps/plugin-updater";
 import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
+import { invokeEdgeFunction } from "../api";
+import { getEmailSyncCount } from "../storage";
 import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
 import { useT, useLocaleStore, type Locale } from "../i18n";
@@ -169,6 +171,37 @@ export default function WorkspaceLayout() {
       void processQueue();
     }
   }, [queueItems]);
+
+  // Auto-sync Outlook emails + calendar on startup and daily at 7 AM
+  useEffect(() => {
+    const syncOutlook = async () => {
+      try {
+        const status = await invokeEdgeFunction("outlookStatus", {}) as { connected?: boolean };
+        if (!status.connected) return;
+        const limit = getEmailSyncCount();
+        await invokeEdgeFunction("syncOutlookEmails", { limit });
+        await invokeEdgeFunction("syncOutlookCalendar", {});
+        await refreshEmailFromRemote();
+        await refreshCalendarFromRemote();
+      } catch (e) {
+        console.warn("Outlook auto-sync failed:", e);
+      }
+    };
+
+    syncOutlook();
+
+    let lastSyncDate = "";
+    const dailyCheckId = window.setInterval(() => {
+      const now = new Date();
+      const today = now.toDateString();
+      if (now.getHours() === 7 && now.getMinutes() === 0 && lastSyncDate !== today) {
+        lastSyncDate = today;
+        void syncOutlook();
+      }
+    }, 60_000);
+
+    return () => window.clearInterval(dailyCheckId);
+  }, []);
 
   // Refresh entity data when the active tab changes
   useEffect(() => {

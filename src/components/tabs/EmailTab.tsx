@@ -98,6 +98,12 @@ export default function EmailTab() {
   const handleConnectOutlook = useCallback(async () => {
     setConnectingOutlook(true);
     try {
+      // Check if Outlook is connected first
+      const status = await invokeEdgeFunction("outlookStatus", {}) as { connected?: boolean };
+      if (!status.connected) {
+        setStatus(t("email.outlookNotConnected"));
+        return;
+      }
       setStatus(t("email.syncingOutlook"));
       const limit = getEmailSyncCount();
       await invokeEdgeFunction("syncOutlookEmails", { limit });
