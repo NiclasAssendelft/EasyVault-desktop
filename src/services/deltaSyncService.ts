@@ -144,10 +144,16 @@ export async function refreshFilesFromRemote(): Promise<void> {
 }
 
 export async function refreshEmailFromRemote(): Promise<void> {
-  if (!canUseRemoteData()) return;
+  if (!canUseRemoteData()) { console.warn("[email-refresh] skipped: no auth token"); return; }
   try {
     const data = await entityList<Record<string, unknown>>("EmailItem", "-received_at", 200);
+    const me = currentUserEmail();
     const emails = data.filter((row) => isOwnedByCurrentUser(row));
+    if (data.length > 0 && emails.length === 0) {
+      const sample = asString(data[0].created_by);
+      console.warn(`[email-refresh] ownership filter removed all ${data.length} rows. me="${me}" sample created_by="${sample}"`);
+    }
+    console.info(`[email-refresh] fetched=${data.length} owned=${emails.length} me="${me}"`);
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("EmailItem");
     for (const row of emails) {
@@ -157,15 +163,21 @@ export async function refreshEmailFromRemote(): Promise<void> {
     }
     useRemoteDataStore.getState().setEmails(emails);
   } catch (err) {
-    console.warn("email sync failed:", err);
+    console.warn("[email-refresh] failed:", err);
   }
 }
 
 export async function refreshCalendarFromRemote(): Promise<void> {
-  if (!canUseRemoteData()) return;
+  if (!canUseRemoteData()) { console.warn("[calendar-refresh] skipped: no auth token"); return; }
   try {
     const data = await entityList<Record<string, unknown>>("CalendarEvent", "start_time", 300);
+    const me = currentUserEmail();
     const events = data.filter((row) => isOwnedByCurrentUser(row));
+    if (data.length > 0 && events.length === 0) {
+      const sample = asString(data[0].created_by);
+      console.warn(`[calendar-refresh] ownership filter removed all ${data.length} rows. me="${me}" sample created_by="${sample}"`);
+    }
+    console.info(`[calendar-refresh] fetched=${data.length} owned=${events.length} me="${me}"`);
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("CalendarEvent");
     for (const row of events) {

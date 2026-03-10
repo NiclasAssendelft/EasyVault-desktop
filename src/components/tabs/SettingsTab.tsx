@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useAuthStore } from "../../stores/authStore";
 import { useFilesStore } from "../../stores/filesStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
@@ -35,10 +36,13 @@ export default function SettingsTab() {
   const [healthStatus, setHealthStatus] = useState("");
   const [outlookConnected, setOutlookConnected] = useState<boolean | null>(null);
   const [outlookLoading, setOutlookLoading] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
 
   const displayName = useMemo(() => toDisplayName(email || getSavedEmail()), [email]);
   const displayEmail = email || getSavedEmail() || "-";
   const avatarLetter = displayName.charAt(0).toUpperCase() || "U";
+
+  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
   // Check Outlook connection status on mount
   useEffect(() => {
@@ -246,6 +250,12 @@ export default function SettingsTab() {
         {healthStatus && <p><strong>{healthStatus}</strong></p>}
         {report && <pre className="capabilities-report">{report}</pre>}
       </div>
+
+      {appVersion && (
+        <p style={{ textAlign: "center", opacity: 0.4, fontSize: 12, marginTop: 24 }}>
+          EasyVault v{appVersion}
+        </p>
+      )}
     </section>
   );
 }

@@ -106,9 +106,10 @@ export default function EmailTab() {
       }
       setStatus(t("email.syncingOutlook"));
       const limit = getEmailSyncCount();
-      await invokeEdgeFunction("syncOutlookEmails", { limit });
+      const result = await invokeEdgeFunction("syncOutlookEmails", { limit }) as { synced?: number; total?: number; message?: string };
       await refreshEmailFromRemote();
-      setStatus(t("email.outlookSynced"));
+      const emailCount = useRemoteDataStore.getState().emails.length;
+      setStatus(`${result.message || "Synced"} (store: ${emailCount})`);
     } catch (err) {
       setStatus(t("email.outlookFailed", { error: String(err) }));
     } finally {
