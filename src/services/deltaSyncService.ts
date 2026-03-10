@@ -143,17 +143,17 @@ export async function refreshFilesFromRemote(): Promise<void> {
   }
 }
 
-export async function refreshEmailFromRemote(): Promise<void> {
-  if (!canUseRemoteData()) { console.warn("[email-refresh] skipped: no auth token"); return; }
+export async function refreshEmailFromRemote(): Promise<string> {
+  if (!canUseRemoteData()) return "no auth token";
   try {
     const data = await entityList<Record<string, unknown>>("EmailItem", "-received_at", 200);
     const me = currentUserEmail();
     const emails = data.filter((row) => isOwnedByCurrentUser(row));
+    let diag = `db=${data.length} owned=${emails.length} me="${me}"`;
     if (data.length > 0 && emails.length === 0) {
       const sample = asString(data[0].created_by);
-      console.warn(`[email-refresh] ownership filter removed all ${data.length} rows. me="${me}" sample created_by="${sample}"`);
+      diag += ` sample="${sample}"`;
     }
-    console.info(`[email-refresh] fetched=${data.length} owned=${emails.length} me="${me}"`);
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("EmailItem");
     for (const row of emails) {
@@ -162,8 +162,9 @@ export async function refreshEmailFromRemote(): Promise<void> {
       if (id && updated) sync.setEntityUpdatedAt("EmailItem", id, updated);
     }
     useRemoteDataStore.getState().setEmails(emails);
+    return diag;
   } catch (err) {
-    console.warn("[email-refresh] failed:", err);
+    return `error: ${err}`;
   }
 }
 
