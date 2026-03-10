@@ -207,8 +207,6 @@ fn list_folder_files(path: &str) -> Result<Vec<LocalFolderFile>, String> {
 }
 
 const ONLYOFFICE_RELAY_PORT_DEFAULT: u16 = 17171;
-const SUPABASE_FUNCTIONS_URL: &str =
-    "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1";
 const SUPABASE_ANON_KEY: &str =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jb2tvZW1mbWRvZHpmdHFiamltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTA2NjgsImV4cCI6MjA4ODE4NjY2OH0.YQPrNUVDCgIDYP5054PoRdnDyph70gPcNJZSlHjbUH8";
 const ONLYOFFICE_CALLBACK_TARGET: &str =
@@ -254,7 +252,6 @@ struct OnlyofficeRelayStats {
 #[derive(Clone)]
 struct RelayAuth {
     token: String,
-    api_key: String,
 }
 
 fn relay_auth_store() -> &'static Mutex<Option<RelayAuth>> {
@@ -267,18 +264,16 @@ fn get_relay_auth() -> Option<RelayAuth> {
 }
 
 #[tauri::command]
-fn set_onlyoffice_relay_auth(token: String, api_key: Option<String>) -> Result<(), String> {
+fn set_onlyoffice_relay_auth(token: String, _api_key: Option<String>) -> Result<(), String> {
     let clean_token = token.trim().to_string();
     if clean_token.is_empty() {
         return Err("token is required".to_string());
     }
-    let clean_api_key = api_key.unwrap_or_default().trim().to_string();
     let mut guard = relay_auth_store()
         .lock()
         .map_err(|_| "relay auth lock poisoned".to_string())?;
     *guard = Some(RelayAuth {
         token: clean_token,
-        api_key: clean_api_key,
     });
     Ok(())
 }
