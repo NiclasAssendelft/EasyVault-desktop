@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
 import { useAuthStore } from "../stores/authStore";
-import { useUiStore } from "../stores/uiStore";
 import { useT, t } from "../i18n";
 import loginBg from "../assets/login-bg.png";
+
+type MessageType = "error" | "success" | "info";
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -11,38 +12,52 @@ export default function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
   const login = useAuthStore((s) => s.login);
   const signup = useAuthStore((s) => s.signup);
-  const setStatus = useUiStore((s) => s.setStatus);
   const tr = useT();
+
+  const clearMessage = () => setMessage(null);
+
+  const switchMode = (m: "login" | "signup") => {
+    setMode(m);
+    clearMessage();
+  };
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    clearMessage();
     if (mode === "signup") {
-      if (password.length < 6) { setStatus(t("signup.passwordTooShort")); return; }
-      if (password !== confirmPassword) { setStatus(t("signup.passwordMismatch")); return; }
+      if (password.length < 6) { setMessage({ text: t("signup.passwordTooShort"), type: "error" }); return; }
+      if (password !== confirmPassword) { setMessage({ text: t("signup.passwordMismatch"), type: "error" }); return; }
     }
     setLoading(true);
-    setStatus(mode === "login" ? t("login.loggingIn") : t("signup.creatingAccount"));
     try {
       if (mode === "login") {
         await login(email.trim(), password);
-        setStatus(t("login.success"));
+        setMessage({ text: t("login.success"), type: "success" });
       } else {
         await signup(email.trim(), password);
-        setStatus(t("signup.success"));
+        setMessage({ text: t("signup.success"), type: "success" });
       }
     } catch (err) {
-      const msg = String(err);
+      const msg = String(err).replace(/^Error:\s*/, "");
       if (mode === "login") {
-        setStatus(msg.includes("login failed") ? msg : t("login.networkError"));
+        const isCredentialError = msg.toLowerCase().includes("invalid login credentials") || msg.includes("login failed");
+        setMessage({ text: isCredentialError ? t("login.wrongCredentials") : msg, type: "error" });
       } else {
-        setStatus(msg.includes("already exists") ? t("signup.alreadyExists") : msg);
+        if (msg.includes("already exists")) {
+          setMessage({ text: t("signup.alreadyExists"), type: "error" });
+        } else if (msg.includes("check your email") || msg.includes("confirm")) {
+          setMessage({ text: t("signup.checkEmail"), type: "info" });
+        } else {
+          setMessage({ text: msg, type: "error" });
+        }
       }
     } finally {
       setLoading(false);
     }
-  }, [mode, email, password, confirmPassword, login, signup, setStatus]);
+  }, [mode, email, password, confirmPassword, login, signup]);
 
   return (
     <div className="login-bg-wrap">
@@ -81,14 +96,14 @@ export default function LoginScreen() {
             <button
               type="button"
               className={`auth-tab${mode === "login" ? " active" : ""}`}
-              onClick={() => setMode("login")}
+              onClick={() => switchMode("login")}
             >
               {tr("login.tabLogin")}
             </button>
             <button
               type="button"
               className={`auth-tab${mode === "signup" ? " active" : ""}`}
-              onClick={() => setMode("signup")}
+              onClick={() => switchMode("signup")}
             >
               {tr("login.tabSignup")}
             </button>
@@ -102,7 +117,7 @@ export default function LoginScreen() {
                 required
                 placeholder={tr("login.emailPlaceholder")}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); clearMessage(); }}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setInputFocused(false)}
               />
@@ -115,7 +130,7 @@ export default function LoginScreen() {
                 required
                 placeholder="••••••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); clearMessage(); }}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setInputFocused(false)}
               />
@@ -129,7 +144,7 @@ export default function LoginScreen() {
                   required
                   placeholder="••••••••••••"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => { setConfirmPassword(e.target.value); clearMessage(); }}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                 />
@@ -139,8 +154,16 @@ export default function LoginScreen() {
             <div className="login-divider" />
 
             <button type="submit" className="login-btn" disabled={loading}>
-              {mode === "login" ? tr("login.submit") : tr("signup.submit")}
+              {loading
+                ? (mode === "login" ? tr("login.loggingIn") : tr("signup.creatingAccount"))
+                : (mode === "login" ? tr("login.submit") : tr("signup.submit"))}
             </button>
+
+            {message && (
+              <div className={`login-message ${message.type}`}>
+                {message.text}
+              </div>
+            )}
           </form>
         </div>
       </div>

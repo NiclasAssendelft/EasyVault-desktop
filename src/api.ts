@@ -533,9 +533,10 @@ export async function login(email: string, password: string): Promise<string> {
     },
     body: JSON.stringify({ email, password }),
   });
-  const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
+  const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; error_description?: string; error?: string; msg?: string };
   if (!res.ok || !data.access_token) {
-    throw new Error(`login failed (${res.status})`);
+    const detail = data.error_description || data.msg || data.error || "";
+    throw new Error(detail || `login failed (${res.status})`);
   }
   // Store refresh token for auto-refresh
   if (data.refresh_token) {

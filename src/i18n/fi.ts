@@ -12,6 +12,7 @@ const fi: Record<keyof typeof en, string> = {
   "login.loggingIn": "Kirjaudutaan...",
   "login.success": "Kirjauduttu!",
   "login.networkError": "Kirjautuminen epäonnistui — tarkista sähköposti ja salasana",
+  "login.wrongCredentials": "Väärä sähköposti tai salasana",
   "login.tabLogin": "Kirjaudu",
   "login.tabSignup": "Luo tili",
   "signup.heading": "Luo tili",
@@ -23,6 +24,7 @@ const fi: Record<keyof typeof en, string> = {
   "signup.alreadyExists": "Tili tällä sähköpostilla on jo olemassa — kokeile kirjautua",
   "signup.passwordMismatch": "Salasanat eivät täsmää",
   "signup.passwordTooShort": "Salasanan on oltava vähintään 6 merkkiä",
+  "signup.checkEmail": "Tili luotu! Tarkista sähköpostisi vahvistaaksesi, kirjaudu sitten sisään.",
 
   // Sidebar
   "nav.home": "Koti",

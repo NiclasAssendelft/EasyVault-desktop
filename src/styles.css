@@ -298,6 +298,30 @@ body {
   cursor: not-allowed;
 }
 
+.login-message {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+.login-message.error {
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: #fca5a5;
+}
+.login-message.success {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+.login-message.info {
+  background: rgba(124, 106, 247, 0.12);
+  border: 1px solid rgba(124, 106, 247, 0.35);
+  color: #c4b5fd;
+}
+
 .workspace-screen {
   height: 100%;
   display: grid;

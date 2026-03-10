@@ -10,6 +10,7 @@ const en = {
   "login.loggingIn": "Signing in...",
   "login.success": "Signed in!",
   "login.networkError": "Login failed — check your email and password",
+  "login.wrongCredentials": "Incorrect email or password",
   "login.tabLogin": "Sign in",
   "login.tabSignup": "Create account",
 
@@ -23,6 +24,7 @@ const en = {
   "signup.alreadyExists": "An account with this email already exists — try signing in",
   "signup.passwordMismatch": "Passwords don't match",
   "signup.passwordTooShort": "Password must be at least 6 characters",
+  "signup.checkEmail": "Account created! Check your email to confirm, then sign in.",
 
   // Sidebar
   "nav.home": "Home",

@@ -12,6 +12,7 @@ const sv: Record<keyof typeof en, string> = {
   "login.loggingIn": "Loggar in...",
   "login.success": "Inloggad!",
   "login.networkError": "Inloggning misslyckades — kontrollera e-post och lösenord",
+  "login.wrongCredentials": "Fel e-postadress eller lösenord",
   "login.tabLogin": "Logga in",
   "login.tabSignup": "Skapa konto",
   "signup.heading": "Skapa konto",
@@ -23,6 +24,7 @@ const sv: Record<keyof typeof en, string> = {
   "signup.alreadyExists": "Ett konto med denna e-post finns redan — prova att logga in",
   "signup.passwordMismatch": "Lösenorden matchar inte",
   "signup.passwordTooShort": "Lösenordet måste vara minst 6 tecken",
+  "signup.checkEmail": "Konto skapat! Kolla din e-post för att bekräfta, logga sedan in.",
 
   // Sidebar
   "nav.home": "Hem",
