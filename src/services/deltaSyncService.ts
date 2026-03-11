@@ -216,11 +216,11 @@ export async function refreshSharedFromRemote(): Promise<void> {
     const spaces = await entityFilter<Record<string, unknown>>("Space", { space_type: "shared" }, "-created_date", 100);
     const me = currentUserEmail();
     const filtered = spaces.filter((row) => {
-      if (!spaceAllowed(asString(row.id))) return false;
-      if (!me) return true;
-      if (asString(row.created_by).toLowerCase() === me) return true;
+      const isOwner = me ? asString(row.created_by).toLowerCase() === me : false;
+      if (!isOwner && !spaceAllowed(asString(row.id))) return false;
+      if (isOwner) return true;
       const members = row.members;
-      if (!Array.isArray(members)) return false;
+      if (!Array.isArray(members)) return true;
       return members.some((m) => m && typeof m === "object" && asString((m as Record<string, unknown>).email).toLowerCase() === me);
     });
     const sync = useSyncStore.getState();
