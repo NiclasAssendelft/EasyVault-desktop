@@ -61,6 +61,15 @@ const EDGE_FUNCTION_MAP: Record<string, string> = {
 };
 
 // ── Supabase field mapping (created_at → created_date for desktop app) ──
+function emailFromJwt(token: string): string {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return (payload.email as string) || "";
+  } catch {
+    return "";
+  }
+}
+
 function mapSupabaseRecord<T>(record: Record<string, unknown>): T {
   return {
     ...record,
@@ -434,7 +443,8 @@ export async function entityCreate<T = Record<string, unknown>>(
   const freshToken = token || await ensureFreshToken();
   // Add created_by for tables that have the column
   const noCreatedBy = new Set(["space_members", "item_tags"]);
-  const email = localStorage.getItem("easyvault_email") || "";
+  // Use email from JWT so it exactly matches auth_email() used by RLS policies
+  const email = emailFromJwt(freshToken) || localStorage.getItem("easyvault_email") || "";
   const payload = noCreatedBy.has(table) ? { ...data } : { ...data, created_by: email };
   const url = `${SUPABASE_URL}/rest/v1/${table}`;
   const res = await tauriFetch(url, {

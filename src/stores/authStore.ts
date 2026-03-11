@@ -35,14 +35,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   personalSpaceId: "",
   login: async (email, password) => {
     const accessToken = await apiLogin(email, password);
-    saveLogin(accessToken, email);
-    set({ isLoggedIn: true, email });
+    const normalizedEmail = email.trim().toLowerCase();
+    saveLogin(accessToken, normalizedEmail);
+    set({ isLoggedIn: true, email: normalizedEmail });
     ensureExtensionToken(accessToken);
   },
   signup: async (email, password) => {
     const accessToken = await apiSignup(email, password);
-    saveLogin(accessToken, email);
-    set({ isLoggedIn: true, email });
+    const normalizedEmail = email.trim().toLowerCase();
+    saveLogin(accessToken, normalizedEmail);
+    set({ isLoggedIn: true, email: normalizedEmail });
     ensureExtensionToken(accessToken);
   },
   logout: () => {
