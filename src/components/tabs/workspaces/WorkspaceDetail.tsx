@@ -292,7 +292,21 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const handleCopyInviteLink = useCallback(async () => {
     try {
       const res = await invokeEdgeFunction<{ token?: string }>("spaceInviteLink", { space_id: activeSpaceId, action: "create", role: inviteLinkRole });
-      if (res.token) { await navigator.clipboard.writeText(res.token); setStatus(t("workspaces.inviteLinkCopied")); }
+      if (res.token) {
+        // navigator.clipboard may not work in Tauri WebView — use textarea fallback
+        try {
+          await navigator.clipboard.writeText(res.token);
+        } catch {
+          const el = document.createElement("textarea");
+          el.value = res.token;
+          el.style.cssText = "position:fixed;opacity:0";
+          document.body.appendChild(el);
+          el.select();
+          document.execCommand("copy");
+          document.body.removeChild(el);
+        }
+        setStatus(t("workspaces.inviteLinkCopied"));
+      }
     } catch (err) { setStatus(t("workspaces.inviteLinkFailed", { error: String(err) })); }
   }, [activeSpaceId, inviteLinkRole, setStatus]);
 

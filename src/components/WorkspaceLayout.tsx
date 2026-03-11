@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useFilesStore } from "../stores/filesStore";
+import { useRemoteDataStore } from "../stores/remoteDataStore";
 import { useUiStore } from "../stores/uiStore";
 import {
   refreshFilesFromRemote,
@@ -15,7 +17,7 @@ import { invokeEdgeFunction } from "../api";
 import { getEmailSyncCount } from "../storage";
 import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
-import { useT, useLocaleStore, type Locale } from "../i18n";
+import { useLocaleStore, type Locale } from "../i18n";
 import Sidebar from "./Sidebar";
 import HomeTab from "./tabs/HomeTab";
 import FilesTab from "./tabs/FilesTab";
@@ -62,6 +64,83 @@ const LOCALES: { code: Locale; label: string }[] = [
   { code: "sv", label: "Svenska" },
   { code: "fi", label: "Suomi" },
 ];
+
+function GlobalSearch() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const items = useFilesStore((s) => s.items);
+  const emails = useRemoteDataStore((s) => s.emails);
+  const spaces = useRemoteDataStore((s) => s.spaces);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: { type: string; label: string; sub: string; tab: string }[] = [];
+    for (const item of items) {
+      if (item.title.toLowerCase().includes(q)) {
+        out.push({ type: "file", label: item.title, sub: item.itemType || "file", tab: "files" });
+      }
+    }
+    for (const e of emails) {
+      const subj = String(e.subject || "");
+      const from = String(e.from_name || e.from_address || "");
+      if (subj.toLowerCase().includes(q) || from.toLowerCase().includes(q)) {
+        out.push({ type: "email", label: subj || "(No subject)", sub: from, tab: "email" });
+      }
+    }
+    for (const s of spaces) {
+      const name = String(s.name || "");
+      if (name.toLowerCase().includes(q)) {
+        out.push({ type: "space", label: name, sub: "Workspace", tab: "workspaces" });
+      }
+    }
+    return out.slice(0, 10);
+  }, [query, items, emails, spaces]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="global-search" ref={ref}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        className="global-search-input"
+        placeholder="Search files, emails, workspaces…"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && results.length > 0 && (
+        <div className="global-search-results">
+          {results.map((r, i) => (
+            <button
+              key={i}
+              className="global-search-result"
+              onClick={() => {
+                setActiveTab(r.tab as Parameters<typeof setActiveTab>[0]);
+                setQuery("");
+                setOpen(false);
+              }}
+            >
+              <span className="gsr-label">{r.label}</span>
+              <span className="gsr-sub">{r.sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LocaleDropdown({ locale, setLocale }: { locale: Locale; setLocale: (l: Locale) => void }) {
   const [open, setOpen] = useState(false);
@@ -110,7 +189,6 @@ export default function WorkspaceLayout() {
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
   const statusText = useUiStore((s) => s.statusText);
   const queueItems = useQueueStore((s) => s.items);
-  const t = useT();
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
 
@@ -216,10 +294,7 @@ export default function WorkspaceLayout() {
       <Sidebar />
       <section className="shell-main">
         <header className="shell-header">
-          <div className="search-shell">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-            <span className="search-placeholder">{t("header.search")}</span>
-          </div>
+          <GlobalSearch />
           <LocaleDropdown locale={locale} setLocale={setLocale} />
         </header>
         <ActiveTabComponent />
