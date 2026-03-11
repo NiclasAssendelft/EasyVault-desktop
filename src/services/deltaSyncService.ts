@@ -95,6 +95,7 @@ export async function refreshFilesFromRemote(): Promise<void> {
           isPinned: asBool(row.is_pinned),
           spaceId: asString(row.space_id),
           createdBy: asString(row.created_by),
+          parentFolderId: asString(row.parent_folder_id),
         })
       );
     sync.clearEntityUpdatedAt("Folder");

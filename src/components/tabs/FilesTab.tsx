@@ -37,6 +37,8 @@ export default function FilesTab() {
   const t = useT();
 
   const activeFolder = folders.find((f) => f.id === activeFolderId);
+  const rootFolders = useMemo(() => folders.filter((f) => !f.parentFolderId), [folders]);
+  const subFolders = useMemo(() => folders.filter((f) => f.parentFolderId === activeFolderId), [folders, activeFolderId]);
 
   const fileItems = useMemo(() => items.filter((i) => i.itemType !== "link"), [items]);
 
@@ -99,11 +101,13 @@ export default function FilesTab() {
   const selectAllVisible = useCallback(() => {
     const allIds = new Set<string>();
     if (categoryFilter === "all" && !activeFolderId) {
-      for (const f of folders) allIds.add(f.id);
+      for (const f of rootFolders) allIds.add(f.id);
+    } else if (activeFolderId) {
+      for (const f of subFolders) allIds.add(f.id);
     }
     for (const i of visibleItems) allIds.add(i.id);
     setSelectedIds(allIds);
-  }, [folders, visibleItems, categoryFilter, activeFolderId]);
+  }, [rootFolders, subFolders, visibleItems, categoryFilter, activeFolderId]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedIds.size === 0 || bulkBusy) return;
@@ -220,9 +224,23 @@ export default function FilesTab() {
           <h2 className="files-folder-page-title">{activeFolder.name}</h2>
           <button type="button" className={`ghost${selectMode ? " active" : ""}`} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>{t("files.select")}</button>
         </div>
+        {subFolders.length > 0 && (
+          <div className="files-folders">
+            {subFolders.map((folder) => (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                onClick={() => setActiveFolderId(folder.id)}
+                selectMode={selectMode}
+                selected={selectedIds.has(folder.id)}
+                onToggleSelect={toggleSelect}
+              />
+            ))}
+          </div>
+        )}
         <div className="files-items">
           {visibleItems.length === 0 ? (
-            <div className="dash-card"><p>{t("files.noItemsInFolder")}</p></div>
+            subFolders.length === 0 ? <div className="dash-card"><p>{t("files.noItemsInFolder")}</p></div> : null
           ) : (
             visibleItems.map((item) => (
               <ItemRow
@@ -319,10 +337,10 @@ export default function FilesTab() {
           <>
             <h4 className="section-label">{t("files.folders")}</h4>
             <div className="files-folders">
-              {folders.length === 0 ? (
+              {rootFolders.length === 0 ? (
                 <div className="dash-card"><p>{t("files.noFolders")}</p></div>
               ) : (
-                folders.map((folder) => (
+                rootFolders.map((folder) => (
                   <FolderCard
                     key={folder.id}
                     folder={folder}

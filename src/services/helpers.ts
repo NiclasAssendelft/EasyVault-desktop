@@ -27,6 +27,7 @@ export interface DesktopFolder {
   isDeleting?: boolean;
   spaceId?: string;
   createdBy?: string;
+  parentFolderId?: string;
 }
 
 export interface DesktopItem {
@@ -101,6 +102,7 @@ export function normalizeFolder(input: Partial<DesktopFolder>): DesktopFolder {
     isDeleting: Boolean(input.isDeleting),
     spaceId: input.spaceId || "",
     createdBy: input.createdBy || "",
+    parentFolderId: input.parentFolderId || "",
   };
 }
 

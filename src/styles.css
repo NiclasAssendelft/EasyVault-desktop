@@ -3887,6 +3887,29 @@ button:disabled {
   color: var(--text);
 }
 
+.space-invite-link-row button.copied {
+  background: #1a7a3a;
+  color: #fff;
+}
+
+.invite-link-display {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.invite-link-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: monospace;
+  border-radius: 6px;
+  background: #0d0d14;
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  cursor: text;
+  user-select: all;
+}
+
 /* Role select dropdown */
 .space-member-role-select {
   padding: 4px 8px;

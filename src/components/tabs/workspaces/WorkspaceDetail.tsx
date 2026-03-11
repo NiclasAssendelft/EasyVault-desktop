@@ -53,6 +53,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [inviteLinkRole, setInviteLinkRole] = useState<"editor" | "viewer">("viewer");
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [inviteLinkToken, setInviteLinkToken] = useState<string | null>(null);
   const [confirmRemoveEmail, setConfirmRemoveEmail] = useState<string | null>(null);
 
   // ── Computed ──
@@ -293,19 +295,28 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     try {
       const res = await invokeEdgeFunction<{ token?: string }>("spaceInviteLink", { space_id: activeSpaceId, action: "create", role: inviteLinkRole });
       if (res.token) {
-        // navigator.clipboard may not work in Tauri WebView — use textarea fallback
+        setInviteLinkToken(res.token);
+        // Try clipboard; textarea fallback with explicit focus for Tauri WebView
+        let copied = false;
         try {
           await navigator.clipboard.writeText(res.token);
+          copied = true;
         } catch {
-          const el = document.createElement("textarea");
-          el.value = res.token;
-          el.style.cssText = "position:fixed;opacity:0";
-          document.body.appendChild(el);
-          el.select();
-          document.execCommand("copy");
-          document.body.removeChild(el);
+          try {
+            const el = document.createElement("textarea");
+            el.value = res.token;
+            el.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px";
+            document.body.appendChild(el);
+            el.focus();
+            el.select();
+            copied = document.execCommand("copy");
+            document.body.removeChild(el);
+          } catch { /* ignore */ }
         }
-        setStatus(t("workspaces.inviteLinkCopied"));
+        if (copied) {
+          setInviteLinkCopied(true);
+          setTimeout(() => setInviteLinkCopied(false), 2000);
+        }
       }
     } catch (err) { setStatus(t("workspaces.inviteLinkFailed", { error: String(err) })); }
   }, [activeSpaceId, inviteLinkRole, setStatus]);
@@ -441,6 +452,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
           handleUpdateRole={handleUpdateRole}
           handleRemoveMember={handleRemoveMember}
           handleCopyInviteLink={handleCopyInviteLink}
+          inviteLinkCopied={inviteLinkCopied}
+          inviteLinkToken={inviteLinkToken}
           setInviteOpen={setInviteOpen}
         />
       )}
@@ -800,7 +813,7 @@ function WorkspaceTasksPanel({ canEdit, tasksLoading, activeTasks, completedTask
   );
 }
 
-function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteLinkRole, confirmRemoveEmail, setConfirmRemoveEmail, handleUpdateRole, handleRemoveMember, handleCopyInviteLink, setInviteOpen }: {
+function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteLinkRole, confirmRemoveEmail, setConfirmRemoveEmail, handleUpdateRole, handleRemoveMember, handleCopyInviteLink, inviteLinkCopied, inviteLinkToken, setInviteOpen }: {
   allMembers: { email: string; role: string }[];
   isOwner: boolean;
   inviteLinkRole: "editor" | "viewer";
@@ -810,6 +823,8 @@ function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteL
   handleUpdateRole: (email: string, role: string) => void;
   handleRemoveMember: (email: string) => void;
   handleCopyInviteLink: () => void;
+  inviteLinkCopied: boolean;
+  inviteLinkToken: string | null;
   setInviteOpen: (v: boolean) => void;
 }) {
   const tr = useT();
@@ -823,8 +838,15 @@ function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteL
               <option value="viewer">{tr("workspaces.roleViewer")}</option>
               <option value="editor">{tr("workspaces.roleEditor")}</option>
             </select>
-            <button type="button" onClick={handleCopyInviteLink}>{tr("workspaces.copyInviteLink")}</button>
+            <button type="button" onClick={handleCopyInviteLink} className={inviteLinkCopied ? "copied" : ""}>
+              {inviteLinkCopied ? "✓ Copied!" : tr("workspaces.copyInviteLink")}
+            </button>
           </div>
+          {inviteLinkToken && (
+            <div className="invite-link-display">
+              <input type="text" readOnly value={inviteLinkToken} onFocus={(e) => e.target.select()} className="invite-link-input" />
+            </div>
+          )}
         </div>
       )}
       <div className="space-member-list">

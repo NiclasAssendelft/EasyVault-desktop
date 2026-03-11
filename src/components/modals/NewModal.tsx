@@ -23,6 +23,7 @@ export default function NewModal() {
   const setCreateMode = useUiStore((s) => s.setCreateMode);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const folders = useFilesStore((s) => s.folders);
+  const activeFolderId = useFilesStore((s) => s.activeFolderId);
   const addFolder = useFilesStore((s) => s.addFolder);
   const addItem = useFilesStore((s) => s.addItem);
   const persist = useFilesStore((s) => s.persist);
@@ -30,14 +31,14 @@ export default function NewModal() {
 
   const [name, setName] = useState("");
   const [itemType, setItemType] = useState<FileItemType>("note");
-  const [folderId, setFolderId] = useState("");
+  const [folderId, setFolderId] = useState(activeFolderId);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   if (!open) return null;
 
   function resetForm() {
-    setName(""); setItemType("note"); setFolderId(""); setFeedback(""); setSubmitting(false);
+    setName(""); setItemType("note"); setFolderId(activeFolderId); setFeedback(""); setSubmitting(false);
   }
   function handleClose() { resetForm(); close(); }
   function handlePickFolder() { resetForm(); setCreateMode("folder"); }
@@ -58,13 +59,14 @@ export default function NewModal() {
         if (duplicate) { setFeedback(t("new.duplicateFolder")); setSubmitting(false); return; }
 
         const result = await safeEntityCreate<Record<string, unknown>>("Folder", {
-          name: trimmedName, space_id: personalSpaceId, parent_folder_id: "",
+          name: trimmedName, space_id: personalSpaceId, parent_folder_id: activeFolderId || "",
         });
         const newFolder = normalizeFolder({
           id: asString(result.id, crypto.randomUUID()), name: trimmedName,
           createdAtIso: asString(result.created_date, new Date().toISOString()),
           updatedAtIso: asString(result.updated_date, asString(result.created_date, new Date().toISOString())),
           spaceId: personalSpaceId, createdBy: asString(result.created_by),
+          parentFolderId: activeFolderId || "",
         });
         const updatedAt = newFolder.updatedAtIso || newFolder.createdAtIso;
         useSyncStore.getState().setEntityUpdatedAt("Folder", newFolder.id, updatedAt);
