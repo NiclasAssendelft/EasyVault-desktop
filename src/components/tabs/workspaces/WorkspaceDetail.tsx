@@ -268,6 +268,35 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     catch (err) { setStatus(String(err)); }
   }, [activeSpaceId, setStatus]);
 
+  // Tauri v2: OS file drops emit tauri://drag-drop instead of DOM drag events
+  useEffect(() => {
+    if (activeSection !== "files") return;
+    type TauriEvent = { listen: (event: string, cb: (e: { payload: unknown }) => void) => Promise<() => void> };
+    const tauriEvent = (window as unknown as { __TAURI__?: { event?: TauriEvent } }).__TAURI__?.event;
+    if (!tauriEvent) return;
+    let unlisten: (() => void) | undefined;
+    void tauriEvent.listen("tauri://drag-drop", async (e) => {
+      const payload = e.payload as { paths?: string[] };
+      setDragOver(false);
+      if (!payload.paths?.length || !canEdit) return;
+      const invoke = (window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string, args: unknown) => Promise<unknown> } } }).__TAURI__?.core?.invoke;
+      if (!invoke) return;
+      const files: File[] = [];
+      for (const path of payload.paths) {
+        try {
+          const bytes = await invoke("read_file_bytes", { path }) as number[];
+          const filename = path.split("/").pop() || path.split("\\").pop() || "file";
+          files.push(new File([new Uint8Array(bytes)], filename));
+        } catch { /* skip */ }
+      }
+      if (files.length > 0) {
+        try { await uploadSelectedFilesToSpace(activeSpaceId, files); await refreshSharedFromRemote(); }
+        catch (err) { setStatus(String(err)); }
+      }
+    }).then((u) => { unlisten = u; });
+    return () => { unlisten?.(); };
+  }, [activeSection, activeSpaceId, canEdit, setStatus]);
+
   const handleAddTask = useCallback(async () => {
     if (!newTaskTitle.trim()) return;
     try {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useQueueStore } from "../../stores/queueStore";
 import { useUiStore } from "../../stores/uiStore";
@@ -7,6 +7,21 @@ import { IMPORT_MAX_RETRIES } from "../../config";
 import { getWatchFolder } from "../../storage";
 import { uploadSelectedFilesToFolder } from "../../services/fileOps";
 import { useT, t } from "../../i18n";
+
+async function pathsToFiles(paths: string[]): Promise<File[]> {
+  const files: File[] = [];
+  // Use Tauri's read_file_bytes command (available via withGlobalTauri)
+  const invoke = (window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string, args: unknown) => Promise<unknown> } } }).__TAURI__?.core?.invoke;
+  if (!invoke) return files;
+  for (const path of paths) {
+    try {
+      const bytes = await invoke("read_file_bytes", { path }) as number[];
+      const filename = path.split("/").pop() || path.split("\\").pop() || "file";
+      files.push(new File([new Uint8Array(bytes)], filename));
+    } catch { /* skip unreadable files */ }
+  }
+  return files;
+}
 
 export default function DropzoneTab() {
   const dropzoneItems = useRemoteDataStore((s) => s.dropzoneItems);
@@ -49,11 +64,29 @@ export default function DropzoneTab() {
     }
   }, []);
 
+  // Tauri v2: OS file drag events don't fire as DOM events — listen via Tauri event API
+  useEffect(() => {
+    type TauriEvent = { listen: (event: string, cb: (e: { payload: unknown }) => void) => Promise<() => void> };
+    const tauriEvent = (window as unknown as { __TAURI__?: { event?: TauriEvent } }).__TAURI__?.event;
+    if (!tauriEvent) return;
+    let unlisten: (() => void) | undefined;
+    let unlistenLeave: (() => void) | undefined;
+    void tauriEvent.listen("tauri://drag-drop", (e) => {
+      const payload = e.payload as { paths?: string[] };
+      setIsDragOver(false);
+      if (payload.paths && payload.paths.length > 0) {
+        void pathsToFiles(payload.paths).then((files) => { if (files.length > 0) void uploadFiles(files); });
+      }
+    }).then((u) => { unlisten = u; });
+    void tauriEvent.listen("tauri://drag-over", () => setIsDragOver(true)).then((u) => { unlistenLeave = u; });
+    return () => { unlisten?.(); unlistenLeave?.(); };
+  }, [uploadFiles]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); }, []);
   const handleDragLeave = useCallback(() => { setIsDragOver(false); }, []);
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setIsDragOver(false);
-    void uploadFiles(Array.from(e.dataTransfer.files));
+    if (e.dataTransfer.files.length > 0) void uploadFiles(Array.from(e.dataTransfer.files));
   }, [uploadFiles]);
   const handleClick = useCallback(() => { fileInputRef.current?.click(); }, []);
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
