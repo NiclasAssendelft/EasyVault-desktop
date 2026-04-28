@@ -7,6 +7,7 @@ import { useSyncStore } from "../../stores/syncStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { asString } from "../../services/helpers";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 export default function DeleteModal() {
   const target = useUiStore((s) => s.deleteTarget);
@@ -16,6 +17,9 @@ export default function DeleteModal() {
   const [deleting, setDeleting] = useState(false);
   const [feedback, setFeedback] = useState("");
 
+  function forceClose() { setDeleting(false); setFeedback(""); closeDeleteModal(); }
+
+  useEscapeClose(!!target && !deleting, forceClose);
   if (!target) return null;
 
   function getEntityName(): string {
@@ -45,8 +49,6 @@ export default function DeleteModal() {
     }
     return t("delete.thisItem");
   }
-
-  function forceClose() { setDeleting(false); setFeedback(""); closeDeleteModal(); }
 
   async function handleDelete() {
     if (!target) return;

@@ -6,6 +6,7 @@ import { useSyncStore } from "../../stores/syncStore";
 import { safeEntityCreate } from "../../services/entityService";
 import { normalizeItem, asString } from "../../services/helpers";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 export default function ImportLinksModal() {
   const open = useUiStore((s) => s.importLinksModalOpen);
@@ -23,6 +24,7 @@ export default function ImportLinksModal() {
     if (open) { setRawText(""); setFeedback(""); setImporting(false); }
   }, [open]);
 
+  useEscapeClose(open, close);
   if (!open) return null;
 
   async function handleImport(e: React.FormEvent) {

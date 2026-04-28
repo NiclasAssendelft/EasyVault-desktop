@@ -8,6 +8,7 @@ import { asString, normalizeFolder, normalizeItem, type FileItemType } from "../
 import { useSyncStore } from "../../stores/syncStore";
 import { useT } from "../../i18n";
 import type { TKey } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 const ITEM_TYPES: { value: FileItemType; labelKey: TKey }[] = [
   { value: "note", labelKey: "new.typeNote" },
@@ -35,12 +36,13 @@ export default function NewModal() {
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!open) return null;
-
   function resetForm() {
     setName(""); setItemType("note"); setFolderId(activeFolderId); setFeedback(""); setSubmitting(false);
   }
   function handleClose() { resetForm(); close(); }
+
+  useEscapeClose(open, handleClose);
+  if (!open) return null;
   function handlePickFolder() { resetForm(); setCreateMode("folder"); }
   function handlePickItem() { resetForm(); setCreateMode("item"); }
 

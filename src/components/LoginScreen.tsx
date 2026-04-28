@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { useT, t } from "../i18n";
-import loginBg from "../assets/login-bg.png";
+import loginBg from "../assets/login-bg.jpg";
 
 type MessageType = "error" | "success" | "info";
 

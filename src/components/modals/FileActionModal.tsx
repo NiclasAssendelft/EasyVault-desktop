@@ -13,6 +13,7 @@ import { fileKindFromItem, asString, getPreviewUrlForItem, toDisplayName } from 
 import { invokeEdgeFunction } from "../../api";
 import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 function canEditBySpace(spaceId: string, createdBy: string): boolean {
   const me = getSavedEmail().trim().toLowerCase();
@@ -42,6 +43,7 @@ export default function FileActionModal() {
 
   const [status, setStatus] = useState("");
 
+  useEscapeClose(!!targetId, close);
   if (!targetId) return null;
   const item = useFilesStore.getState().items.find((i) => i.id === targetId);
   if (!item) return null;

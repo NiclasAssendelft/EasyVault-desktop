@@ -7,6 +7,7 @@ import { syncRemoteDelta } from "../../services/deltaSyncService";
 import { asString, asArray } from "../../services/helpers";
 import { useSyncStore } from "../../stores/syncStore";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 export default function ManageModal() {
   const target = useUiStore((s) => s.manageTarget);
@@ -42,6 +43,7 @@ export default function ManageModal() {
     setFeedback(""); setSaving(false);
   }, [target]);
 
+  useEscapeClose(!!target, close);
   if (!target) return null;
 
   const entityType = target.entity;

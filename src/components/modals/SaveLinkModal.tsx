@@ -7,6 +7,7 @@ import { useSyncStore } from "../../stores/syncStore";
 import { safeEntityCreate, safeEntityUpdate } from "../../services/entityService";
 import { normalizeItem, asString } from "../../services/helpers";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 type StatusOption = "status:unread" | "status:read" | "";
 
@@ -56,6 +57,7 @@ export default function SaveLinkModal() {
     setFeedback(""); setSaving(false); setFetching(false);
   }, [open, editTargetId, personalSpaceId]);
 
+  useEscapeClose(open, close);
   if (!open) return null;
 
   async function fetchPageMeta() {

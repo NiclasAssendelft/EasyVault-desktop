@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, lazy, Suspense } from "react";
 import { useFilesStore } from "../stores/filesStore";
 import { useRemoteDataStore } from "../stores/remoteDataStore";
 import { useUiStore } from "../stores/uiStore";
@@ -19,22 +19,23 @@ import { useQueueStore } from "../stores/queueStore";
 import { useDeltaSync } from "../hooks/useDeltaSync";
 import { useLocaleStore, type Locale } from "../i18n";
 import Sidebar from "./Sidebar";
-import HomeTab from "./tabs/HomeTab";
-import FilesTab from "./tabs/FilesTab";
-import EmailTab from "./tabs/EmailTab";
-import CalendarTab from "./tabs/CalendarTab";
-import VaultTab from "./tabs/VaultTab";
-import WorkspacesTab from "./tabs/workspaces/WorkspacesTab";
-import DropzoneTab from "./tabs/DropzoneTab";
-import LinksTab from "./tabs/LinksTab";
-import SettingsTab from "./tabs/SettingsTab";
-import NewModal from "./modals/NewModal";
-import SaveLinkModal from "./modals/SaveLinkModal";
-import ImportLinksModal from "./modals/ImportLinksModal";
-import ManageModal from "./modals/ManageModal";
-import DeleteModal from "./modals/DeleteModal";
-import FileActionModal from "./modals/FileActionModal";
-import PreviewEditModal from "./modals/PreviewEditModal";
+import ErrorBoundary from "./ErrorBoundary";
+const HomeTab = lazy(() => import("./tabs/HomeTab"));
+const FilesTab = lazy(() => import("./tabs/FilesTab"));
+const EmailTab = lazy(() => import("./tabs/EmailTab"));
+const CalendarTab = lazy(() => import("./tabs/CalendarTab"));
+const VaultTab = lazy(() => import("./tabs/VaultTab"));
+const WorkspacesTab = lazy(() => import("./tabs/workspaces/WorkspacesTab"));
+const DropzoneTab = lazy(() => import("./tabs/DropzoneTab"));
+const LinksTab = lazy(() => import("./tabs/LinksTab"));
+const SettingsTab = lazy(() => import("./tabs/SettingsTab"));
+const NewModal = lazy(() => import("./modals/NewModal"));
+const SaveLinkModal = lazy(() => import("./modals/SaveLinkModal"));
+const ImportLinksModal = lazy(() => import("./modals/ImportLinksModal"));
+const ManageModal = lazy(() => import("./modals/ManageModal"));
+const DeleteModal = lazy(() => import("./modals/DeleteModal"));
+const FileActionModal = lazy(() => import("./modals/FileActionModal"));
+const PreviewEditModal = lazy(() => import("./modals/PreviewEditModal"));
 
 const TAB_COMPONENTS = {
   home: HomeTab,
@@ -297,18 +298,24 @@ export default function WorkspaceLayout() {
           <GlobalSearch />
           <LocaleDropdown locale={locale} setLocale={setLocale} />
         </header>
-        <ActiveTabComponent />
+        <ErrorBoundary>
+          <Suspense fallback={<div className="tab-loading">Loading…</div>}>
+            <ActiveTabComponent />
+          </Suspense>
+        </ErrorBoundary>
         {statusText && statusText !== "idle" && (
           <div className="status-bar">{statusText}</div>
         )}
       </section>
-      <NewModal />
-      <ManageModal />
-      <DeleteModal />
-      <FileActionModal />
-      <PreviewEditModal />
-      <SaveLinkModal />
-      <ImportLinksModal />
+      <Suspense fallback={null}>
+        <NewModal />
+        <ManageModal />
+        <DeleteModal />
+        <FileActionModal />
+        <PreviewEditModal />
+        <SaveLinkModal />
+        <ImportLinksModal />
+      </Suspense>
     </section>
   );
 }

@@ -22,6 +22,7 @@ import type { EditorAdapter, AdapterRenderContext, AdapterSaveContext } from "..
 import { useT, t } from "../../i18n";
 import { extractTextFromPdf, extractTextFromDocx, extractTextFromPlainFile } from "../../services/textExtractService";
 import TranslatePanel from "../TranslatePanel";
+import { useEscapeClose } from "../../hooks/useEscapeClose";
 
 function adapterForKind(kind: PreviewKind): EditorAdapter | null {
   if (kind === "pdf") return pdfNutrientAdapter;
@@ -133,6 +134,7 @@ export default function PreviewEditModal() {
     }
   }, [showTranslate, item]);
 
+  useEscapeClose(!!targetId && !savingGlobal, handleClose);
   if (!targetId) return null;
   if (!item) return null;
 
