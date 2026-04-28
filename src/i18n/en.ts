@@ -41,6 +41,7 @@ const en = {
   "nav.dropzone": "Dropzone",
   "nav.settings": "Settings",
   "nav.signOut": "Sign out",
+  "sidebar.openSettings": "Open settings",
 
   // WorkspaceLayout
   "header.title": "EasyVault",
@@ -49,6 +50,14 @@ const en = {
 
   // HomeTab
   "home.greeting": "Good afternoon",
+  "home.greetingMorning": "Good morning{{name}}",
+  "home.greetingAfternoon": "Good afternoon{{name}}",
+  "home.greetingEvening": "Good evening{{name}}",
+  "home.greetingNight": "Welcome back{{name}}",
+  "home.openCalendar": "Open Calendar",
+  "home.openDropzone": "Add files",
+  "home.noPinnedHint": "Pin items from the Files tab to keep them within reach",
+  "home.noImportantEmailsHint": "Mark emails as important and they'll show up here",
   "home.subtitle": "Here is what needs your attention today",
   "home.pinned": "Pinned",
   "home.desktop": "Desktop",

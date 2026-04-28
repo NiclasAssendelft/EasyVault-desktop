@@ -41,6 +41,7 @@ const sv: Record<keyof typeof en, string> = {
   "nav.dropzone": "Dropzone",
   "nav.settings": "Inställningar",
   "nav.signOut": "Logga ut",
+  "sidebar.openSettings": "Öppna inställningar",
 
   // WorkspaceLayout
   "header.title": "EasyVault",
@@ -49,6 +50,14 @@ const sv: Record<keyof typeof en, string> = {
 
   // HomeTab
   "home.greeting": "God eftermiddag",
+  "home.greetingMorning": "God morgon{{name}}",
+  "home.greetingAfternoon": "God eftermiddag{{name}}",
+  "home.greetingEvening": "God kväll{{name}}",
+  "home.greetingNight": "Välkommen tillbaka{{name}}",
+  "home.openCalendar": "Öppna kalender",
+  "home.openDropzone": "Lägg till filer",
+  "home.noPinnedHint": "Fäst objekt från Filer-fliken för att hålla dem nära till hands",
+  "home.noImportantEmailsHint": "Markera mejl som viktiga och de visas här",
   "home.subtitle": "Här är det som behöver din uppmärksamhet idag",
   "home.pinned": "Fästa",
   "home.desktop": "Skrivbord",

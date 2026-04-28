@@ -41,6 +41,7 @@ const fi: Record<keyof typeof en, string> = {
   "nav.dropzone": "Dropzone",
   "nav.settings": "Asetukset",
   "nav.signOut": "Kirjaudu ulos",
+  "sidebar.openSettings": "Avaa asetukset",
 
   // WorkspaceLayout
   "header.title": "EasyVault",
@@ -49,6 +50,14 @@ const fi: Record<keyof typeof en, string> = {
 
   // HomeTab
   "home.greeting": "Hyvää iltapäivää",
+  "home.greetingMorning": "Hyvää huomenta{{name}}",
+  "home.greetingAfternoon": "Hyvää iltapäivää{{name}}",
+  "home.greetingEvening": "Hyvää iltaa{{name}}",
+  "home.greetingNight": "Tervetuloa takaisin{{name}}",
+  "home.openCalendar": "Avaa kalenteri",
+  "home.openDropzone": "Lisää tiedostoja",
+  "home.noPinnedHint": "Kiinnitä kohteita Tiedostot-välilehdeltä pitääksesi ne käden ulottuvilla",
+  "home.noImportantEmailsHint": "Merkitse sähköposteja tärkeiksi, niin ne näkyvät tässä",
   "home.subtitle": "Tässä on asiat, jotka vaativat huomiotasi tänään",
   "home.pinned": "Kiinnitetyt",
   "home.desktop": "Työpöytä",

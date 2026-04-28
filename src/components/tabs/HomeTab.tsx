@@ -2,8 +2,10 @@ import { useMemo, useCallback } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
+import { useAuthStore } from "../../stores/authStore";
 import { asString, asBool } from "../../services/helpers";
 import { useT } from "../../i18n";
+import type { TKey } from "../../i18n";
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -19,14 +21,36 @@ function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function greetingKeyForHour(hour: number): TKey {
+  if (hour < 5) return "home.greetingNight";
+  if (hour < 12) return "home.greetingMorning";
+  if (hour < 18) return "home.greetingAfternoon";
+  return "home.greetingEvening";
+}
+
+function firstNameFromEmail(email: string): string {
+  if (!email) return "";
+  const local = email.split("@")[0] || "";
+  const first = local.split(/[._-]/)[0] || "";
+  if (!first) return "";
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
 export default function HomeTab() {
   const items = useFilesStore((s) => s.items);
   const events = useRemoteDataStore((s) => s.events);
   const emails = useRemoteDataStore((s) => s.emails);
   const spaces = useRemoteDataStore((s) => s.spaces);
   const packs = useRemoteDataStore((s) => s.packs);
+  const userEmail = useAuthStore((s) => s.email);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const t = useT();
+
+  const greeting = useMemo(() => {
+    const name = firstNameFromEmail(userEmail);
+    const key = greetingKeyForHour(new Date().getHours());
+    return name ? t(key, { name: `, ${name}` }) : t(key, { name: "" });
+  }, [userEmail, t]);
 
   // Today's schedule — events that start today
   const todayEvents = useMemo(() => {
@@ -86,7 +110,7 @@ export default function HomeTab() {
   return (
     <section className="tab-panel">
       <div className="home-hero">
-        <h1>{t("home.greeting")}</h1>
+        <h1>{greeting}</h1>
       </div>
 
       {/* ── Navigation cards row ── */}
@@ -125,7 +149,13 @@ export default function HomeTab() {
           <button type="button" className="home-panel-link" onClick={() => goTo("calendar")}>{t("home.viewAll")}</button>
         </div>
         {todayEvents.length === 0 ? (
-          <p className="home-panel-empty">{t("home.noSchedule")}</p>
+          <div className="home-panel-empty">
+            <span className="home-empty-icon" aria-hidden="true">{"📅"}</span>
+            <p className="home-empty-text">{t("home.noSchedule")}</p>
+            <button type="button" className="home-empty-cta" onClick={() => goTo("calendar")}>
+              {t("home.openCalendar")}
+            </button>
+          </div>
         ) : (
           <div className="home-schedule-list">
             {todayEvents.map((ev) => {
@@ -163,7 +193,11 @@ export default function HomeTab() {
             <button type="button" className="home-panel-link" onClick={() => goTo("files")}>{t("home.viewAll")}</button>
           </div>
           {pinnedItems.length === 0 ? (
-            <p className="home-panel-empty">{t("home.noPinned")}</p>
+            <div className="home-panel-empty">
+              <span className="home-empty-icon" aria-hidden="true">{"📌"}</span>
+              <p className="home-empty-text">{t("home.noPinned")}</p>
+              <p className="home-empty-hint">{t("home.noPinnedHint")}</p>
+            </div>
           ) : (
             <div className="home-panel-list">
               {pinnedItems.slice(0, 6).map((item) => (
@@ -186,7 +220,13 @@ export default function HomeTab() {
             <button type="button" className="home-panel-link" onClick={() => goTo("calendar")}>{t("home.viewAll")}</button>
           </div>
           {upcomingMeetings.length === 0 ? (
-            <p className="home-panel-empty">{t("home.noMeetings")}</p>
+            <div className="home-panel-empty">
+              <span className="home-empty-icon" aria-hidden="true">{"🗓️"}</span>
+              <p className="home-empty-text">{t("home.noMeetings")}</p>
+              <button type="button" className="home-empty-cta" onClick={() => goTo("calendar")}>
+                {t("home.openCalendar")}
+              </button>
+            </div>
           ) : (
             <div className="home-panel-list">
               {upcomingMeetings.map((ev) => {
@@ -214,7 +254,13 @@ export default function HomeTab() {
             <button type="button" className="home-panel-link" onClick={() => goTo("files")}>{t("home.viewAll")}</button>
           </div>
           {recentFiles.length === 0 ? (
-            <p className="home-panel-empty">{t("home.noRecentFiles")}</p>
+            <div className="home-panel-empty">
+              <span className="home-empty-icon" aria-hidden="true">{"📄"}</span>
+              <p className="home-empty-text">{t("home.noRecentFiles")}</p>
+              <button type="button" className="home-empty-cta" onClick={() => goTo("queue")}>
+                {t("home.openDropzone")}
+              </button>
+            </div>
           ) : (
             <div className="home-panel-list">
               {recentFiles.slice(0, 6).map((item) => (
@@ -240,7 +286,11 @@ export default function HomeTab() {
             <button type="button" className="home-panel-link" onClick={() => goTo("email")}>{t("home.viewAll")}</button>
           </div>
           {importantEmails.length === 0 ? (
-            <p className="home-panel-empty">{t("home.noImportantEmails")}</p>
+            <div className="home-panel-empty">
+              <span className="home-empty-icon" aria-hidden="true">{"✉️"}</span>
+              <p className="home-empty-text">{t("home.noImportantEmails")}</p>
+              <p className="home-empty-hint">{t("home.noImportantEmailsHint")}</p>
+            </div>
           ) : (
             <div className="home-panel-list">
               {importantEmails.map((email) => {
