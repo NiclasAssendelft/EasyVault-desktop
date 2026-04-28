@@ -13,6 +13,11 @@ const en = {
   "login.wrongCredentials": "Incorrect email or password",
   "login.tabLogin": "Sign in",
   "login.tabSignup": "Create account",
+  "login.forgotPassword": "Forgot password?",
+  "login.capsLockOn": "Caps Lock is on",
+  "login.enterEmailFirst": "Enter your email above and click 'Forgot password?' again",
+  "login.recoveryEmailSent": "Recovery email sent to {{email}} — check your inbox",
+  "login.recoveryFailed": "Could not send recovery email: {{error}}",
 
   // Signup
   "signup.heading": "Create account",

@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { useT, t } from "../i18n";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config";
 import loginBg from "../assets/login-bg.jpg";
 
 type MessageType = "error" | "success" | "info";
@@ -13,23 +14,64 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const login = useAuthStore((s) => s.login);
   const signup = useAuthStore((s) => s.signup);
   const tr = useT();
 
-  const clearMessage = () => setMessage(null);
+  const clearMessage = () => { setMessage(null); setHasError(false); };
 
   const switchMode = (m: "login" | "signup") => {
     setMode(m);
     clearMessage();
   };
 
+  // Detect Caps Lock state for the password fields
+  const handleCapsCheck = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (typeof e.getModifierState === "function") {
+      setCapsLockOn(e.getModifierState("CapsLock"));
+    }
+  };
+
+  useEffect(() => {
+    if (!loading) return;
+    const handler = (e: KeyboardEvent): void => {
+      if (typeof e.getModifierState === "function") setCapsLockOn(e.getModifierState("CapsLock"));
+    };
+    window.addEventListener("keyup", handler);
+    return () => window.removeEventListener("keyup", handler);
+  }, [loading]);
+
+  const handleForgotPassword = useCallback(async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setMessage({ text: t("login.enterEmailFirst"), type: "info" });
+      return;
+    }
+    setLoading(true);
+    clearMessage();
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      setMessage({ text: t("login.recoveryEmailSent", { email: trimmed }), type: "info" });
+    } catch (err) {
+      setMessage({ text: t("login.recoveryFailed", { error: String(err).replace(/^Error:\s*/, "") }), type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  }, [email]);
+
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessage();
     if (mode === "signup") {
-      if (password.length < 6) { setMessage({ text: t("signup.passwordTooShort"), type: "error" }); return; }
-      if (password !== confirmPassword) { setMessage({ text: t("signup.passwordMismatch"), type: "error" }); return; }
+      if (password.length < 6) { setMessage({ text: t("signup.passwordTooShort"), type: "error" }); setHasError(true); return; }
+      if (password !== confirmPassword) { setMessage({ text: t("signup.passwordMismatch"), type: "error" }); setHasError(true); return; }
     }
     setLoading(true);
     try {
@@ -42,6 +84,7 @@ export default function LoginScreen() {
       }
     } catch (err) {
       const msg = String(err).replace(/^Error:\s*/, "");
+      setHasError(true);
       if (mode === "login") {
         const isCredentialError = msg.toLowerCase().includes("invalid login credentials") || msg.includes("login failed");
         setMessage({ text: isCredentialError ? t("login.wrongCredentials") : msg, type: "error" });
@@ -124,16 +167,36 @@ export default function LoginScreen() {
             </div>
 
             <div className="login-field">
-              <label>{tr("login.passwordLabel")}</label>
+              <div className="login-field-row">
+                <label>{tr("login.passwordLabel")}</label>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    className="login-forgot"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                  >
+                    {tr("login.forgotPassword")}
+                  </button>
+                )}
+              </div>
               <input
                 type="password"
                 required
                 placeholder="••••••••••••"
+                className={hasError ? "login-input-error" : ""}
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); clearMessage(); }}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setInputFocused(false)}
+                onKeyUp={handleCapsCheck}
+                onKeyDown={handleCapsCheck}
               />
+              {capsLockOn && (
+                <div className="login-caps-warn" role="status">
+                  ⇪ {tr("login.capsLockOn")}
+                </div>
+              )}
             </div>
 
             {mode === "signup" && (
@@ -143,10 +206,13 @@ export default function LoginScreen() {
                   type="password"
                   required
                   placeholder="••••••••••••"
+                  className={hasError ? "login-input-error" : ""}
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); clearMessage(); }}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
+                  onKeyUp={handleCapsCheck}
+                  onKeyDown={handleCapsCheck}
                 />
               </div>
             )}
@@ -154,13 +220,22 @@ export default function LoginScreen() {
             <div className="login-divider" />
 
             <button type="submit" className="login-btn" disabled={loading}>
-              {loading
-                ? (mode === "login" ? tr("login.loggingIn") : tr("signup.creatingAccount"))
-                : (mode === "login" ? tr("login.submit") : tr("signup.submit"))}
+              {loading ? (
+                <span className="login-btn-loading">
+                  <span className="login-spinner" aria-hidden="true" />
+                  {mode === "login" ? tr("login.loggingIn") : tr("signup.creatingAccount")}
+                </span>
+              ) : (
+                <span>{mode === "login" ? tr("login.submit") : tr("signup.submit")}</span>
+              )}
             </button>
 
             {message && (
-              <div className={`login-message ${message.type}`}>
+              <div
+                className={`login-message ${message.type}`}
+                role={message.type === "error" ? "alert" : "status"}
+                aria-live="polite"
+              >
                 {message.text}
               </div>
             )}

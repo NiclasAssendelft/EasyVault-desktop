@@ -300,16 +300,22 @@ body {
 
 .login-message {
   margin-top: 14px;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.4;
   text-align: center;
+  animation: login-message-in 0.18s ease-out;
+}
+@keyframes login-message-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .login-message.error {
-  background: rgba(220, 38, 38, 0.12);
-  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.14);
+  border: 1px solid rgba(220, 38, 38, 0.45);
   color: #fca5a5;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.06), 0 6px 18px rgba(220, 38, 38, 0.12);
 }
 .login-message.success {
   background: rgba(34, 197, 94, 0.12);
@@ -320,6 +326,73 @@ body {
   background: rgba(124, 106, 247, 0.12);
   border: 1px solid rgba(124, 106, 247, 0.35);
   color: #c4b5fd;
+}
+
+.login-input-error {
+  border-color: rgba(220, 38, 38, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.18), 0 0 22px rgba(220, 38, 38, 0.12) !important;
+  animation: login-input-shake 0.32s ease-out;
+}
+@keyframes login-input-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.login-field-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.login-field-row label {
+  margin-bottom: 0 !important;
+}
+
+.login-forgot {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: rgba(168, 159, 250, 0.7);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: color 0.15s ease;
+}
+.login-forgot:hover { color: #c4b5fd; }
+.login-forgot:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.login-caps-warn {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #fbbf24;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: login-message-in 0.16s ease-out;
+}
+
+.login-btn-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.login-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(168, 159, 250, 0.25);
+  border-top-color: #a89ffa;
+  animation: login-spin 0.7s linear infinite;
+}
+@keyframes login-spin {
+  to { transform: rotate(360deg); }
 }
 
 .workspace-screen {
