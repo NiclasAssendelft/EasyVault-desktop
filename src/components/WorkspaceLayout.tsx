@@ -70,10 +70,30 @@ function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const items = useFilesStore((s) => s.items);
   const emails = useRemoteDataStore((s) => s.emails);
   const spaces = useRemoteDataStore((s) => s.spaces);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      const isMac = navigator.platform.toUpperCase().includes("MAC");
+      const meta = isMac ? e.metaKey : e.ctrlKey;
+      if (meta && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        setOpen(true);
+      }
+      if (e.key === "Escape" && document.activeElement === inputRef.current) {
+        inputRef.current?.blur();
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -115,12 +135,15 @@ function GlobalSearch() {
         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
       <input
+        ref={inputRef}
         className="global-search-input"
         placeholder="Search files, emails, workspaces…"
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        aria-label="Global search"
       />
+      <kbd className="global-search-shortcut" aria-hidden="true">⌘K</kbd>
       {open && results.length > 0 && (
         <div className="global-search-results">
           {results.map((r, i) => (

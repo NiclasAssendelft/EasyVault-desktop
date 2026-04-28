@@ -29,4 +29,20 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes("node_modules")) {
+            if (id.includes("react") || id.includes("scheduler")) return "vendor-react";
+            if (id.includes("@tauri-apps")) return "vendor-tauri";
+            if (id.includes("zustand")) return "vendor-zustand";
+            if (id.includes("pdfjs-dist") || id.includes("mammoth")) return "vendor-docs";
+          }
+          return undefined;
+        },
+      },
+    },
+  },
 }));
