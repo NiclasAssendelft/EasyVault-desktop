@@ -1,4 +1,4 @@
-import { entityList, entityFilter, entityDelete, callDeltaSync, invokeEdgeFunction } from "../api";
+import { entityFilter, entityDelete, callDeltaSync, invokeEdgeFunction } from "../api";
 import { getAuthToken, getPreferredUploadToken, getSavedEmail } from "../storage";
 import {
   asString, asBool, asArray, normalizeFolder, normalizeItem,
@@ -76,10 +76,42 @@ export async function refreshFilesFromRemote(): Promise<void> {
   if (!canUseRemoteData()) return;
   await refreshAccessScope();
   try {
-    const [folders, items] = await Promise.all([
-      entityList<Record<string, unknown>>("Folder", "-created_date", 500),
-      entityList<Record<string, unknown>>("VaultItem", "-updated_date", 1000),
-    ]);
+    // Fetch owned rows by created_by + (separately) rows in any shared space
+    // the user has access to, then merge by id. This pushes both filters to
+    // the DB, so the global LIMIT can't be exhausted by other users' rows.
+    const me = currentUserEmail();
+    const { accessibleSpaceIds } = useAuthStore.getState();
+
+    const ownedFolders = me
+      ? entityFilter<Record<string, unknown>>("Folder", { created_by: me }, "-created_date", 1000)
+      : Promise.resolve([] as Record<string, unknown>[]);
+    const ownedItems = me
+      ? entityFilter<Record<string, unknown>>("VaultItem", { created_by: me }, "-updated_date", 2000)
+      : Promise.resolve([] as Record<string, unknown>[]);
+
+    const sharedFolders = accessibleSpaceIds.length > 0
+      ? Promise.all(
+          accessibleSpaceIds.map((spaceId) =>
+            entityFilter<Record<string, unknown>>("Folder", { space_id: spaceId }, "-created_date", 500),
+          ),
+        ).then((arrs) => arrs.flat())
+      : Promise.resolve([] as Record<string, unknown>[]);
+    const sharedItems = accessibleSpaceIds.length > 0
+      ? Promise.all(
+          accessibleSpaceIds.map((spaceId) =>
+            entityFilter<Record<string, unknown>>("VaultItem", { space_id: spaceId }, "-updated_date", 500),
+          ),
+        ).then((arrs) => arrs.flat())
+      : Promise.resolve([] as Record<string, unknown>[]);
+
+    const [oF, sF, oI, sI] = await Promise.all([ownedFolders, sharedFolders, ownedItems, sharedItems]);
+    const folderMap = new Map<string, Record<string, unknown>>();
+    for (const f of [...oF, ...sF]) folderMap.set(asString(f.id), f);
+    const itemMap = new Map<string, Record<string, unknown>>();
+    for (const i of [...oI, ...sI]) itemMap.set(asString(i.id), i);
+
+    const folders = Array.from(folderMap.values());
+    const items = Array.from(itemMap.values());
 
     const sync = useSyncStore.getState();
     const filesStore = useFilesStore.getState();
@@ -199,8 +231,14 @@ export async function refreshCalendarFromRemote(): Promise<void> {
 export async function refreshVaultFromRemote(): Promise<void> {
   if (!canUseRemoteData()) return;
   try {
-    const data = await entityList<Record<string, unknown>>("GatherPack", "-created_date", 100);
-    const packs = data.filter((row) => isOwnedByCurrentUser(row));
+    // Filter at the DB level by created_by — see refreshEmailFromRemote.
+    const me = currentUserEmail();
+    const packs = await entityFilter<Record<string, unknown>>(
+      "GatherPack",
+      me ? { created_by: me } : {},
+      "-created_date",
+      500,
+    );
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("GatherPack");
     for (const row of packs) {
@@ -243,8 +281,16 @@ export async function refreshSharedFromRemote(): Promise<void> {
 export async function refreshDropzoneFromRemote(): Promise<void> {
   if (!canUseRemoteData()) return;
   try {
-    const items = await entityFilter<Record<string, unknown>>("VaultItem", { source: "local_upload" }, "-created_date", 30);
-    const filtered = items.filter((row) => spaceAllowed(asString(row.space_id)) && isOwnedByCurrentUser(row));
+    // Push created_by to the DB filter so the (small) limit doesn't get
+    // eaten by other users' uploads in a multi-user table.
+    const me = currentUserEmail();
+    const items = await entityFilter<Record<string, unknown>>(
+      "VaultItem",
+      me ? { source: "local_upload", created_by: me } : { source: "local_upload" },
+      "-created_date",
+      200,
+    );
+    const filtered = items.filter((row) => spaceAllowed(asString(row.space_id)));
     useRemoteDataStore.getState().setDropzoneItems(filtered);
   } catch (err) {
     console.warn("dropzone sync failed:", err);

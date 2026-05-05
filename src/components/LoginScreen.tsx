@@ -52,10 +52,13 @@ export default function LoginScreen() {
     setLoading(true);
     clearMessage();
     try {
+      // redirect_to overrides the project's Site URL so the email link lands
+      // on our hosted recovery page instead of localhost:3000.
+      const redirectTo = `${SUPABASE_URL}/functions/v1/password-recover`;
       const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
-        body: JSON.stringify({ email: trimmed }),
+        body: JSON.stringify({ email: trimmed, redirect_to: redirectTo }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       setMessage({ text: t("login.recoveryEmailSent", { email: trimmed }), type: "info" });
