@@ -147,14 +147,16 @@ export async function refreshFilesFromRemote(): Promise<void> {
 export async function refreshEmailFromRemote(): Promise<string> {
   if (!canUseRemoteData()) return "no auth token";
   try {
-    const data = await entityList<Record<string, unknown>>("EmailItem", "-received_at", 200);
+    // Filter at the DB level by created_by so the global LIMIT can't be
+    // exhausted by other users' rows before this user's emails are reached.
     const me = currentUserEmail();
-    const emails = data.filter((row) => isOwnedByCurrentUser(row));
-    let diag = `db=${data.length} owned=${emails.length} me="${me}"`;
-    if (data.length > 0 && emails.length === 0) {
-      const sample = asString(data[0].created_by);
-      diag += ` sample="${sample}"`;
-    }
+    const emails = await entityFilter<Record<string, unknown>>(
+      "EmailItem",
+      me ? { created_by: me } : {},
+      "-received_at",
+      1000,
+    );
+    const diag = `db=${emails.length} owned=${emails.length} me="${me}"`;
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("EmailItem");
     for (const row of emails) {
@@ -172,14 +174,15 @@ export async function refreshEmailFromRemote(): Promise<string> {
 export async function refreshCalendarFromRemote(): Promise<void> {
   if (!canUseRemoteData()) { console.warn("[calendar-refresh] skipped: no auth token"); return; }
   try {
-    const data = await entityList<Record<string, unknown>>("CalendarEvent", "start_time", 300);
+    // Filter at the DB level by created_by — see refreshEmailFromRemote for why.
     const me = currentUserEmail();
-    const events = data.filter((row) => isOwnedByCurrentUser(row));
-    if (data.length > 0 && events.length === 0) {
-      const sample = asString(data[0].created_by);
-      console.warn(`[calendar-refresh] ownership filter removed all ${data.length} rows. me="${me}" sample created_by="${sample}"`);
-    }
-    console.info(`[calendar-refresh] fetched=${data.length} owned=${events.length} me="${me}"`);
+    const events = await entityFilter<Record<string, unknown>>(
+      "CalendarEvent",
+      me ? { created_by: me } : {},
+      "start_time",
+      500,
+    );
+    console.info(`[calendar-refresh] owned=${events.length} me="${me}"`);
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("CalendarEvent");
     for (const row of events) {

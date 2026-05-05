@@ -126,16 +126,24 @@ export default function EmailTab() {
     [openManageModal, openDeleteModal],
   );
 
+  const sorted = useMemo(() => {
+    return [...emails].sort((a, b) => {
+      const at = asString(a.received_at || a.receivedDateTime || a.created_date);
+      const bt = asString(b.received_at || b.receivedDateTime || b.created_date);
+      return bt.localeCompare(at); // newest first (ISO strings sort lexically)
+    });
+  }, [emails]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return emails;
+    if (!search.trim()) return sorted;
     const q = search.toLowerCase();
-    return emails.filter((e) => {
+    return sorted.filter((e) => {
       const subject = asString(e.subject).toLowerCase();
       const from = asString(e.from || e.from_name || e.from_address).toLowerCase();
       const snippet = asString(e.snippet).toLowerCase();
       return subject.includes(q) || from.includes(q) || snippet.includes(q);
     });
-  }, [emails, search]);
+  }, [sorted, search]);
 
   const selected = useMemo(
     () => (selectedId ? emails.find((e) => asString(e.id) === selectedId) : null),
