@@ -21,6 +21,40 @@ function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function formatRelative(iso: string): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diff = Date.now() - then;
+  if (diff < 0) return formatDateShort(iso); // future events fall back to absolute
+  const min = 60 * 1000, hour = 60 * min, day = 24 * hour, week = 7 * day;
+  if (diff < min) return "just now";
+  if (diff < hour) return `${Math.floor(diff / min)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
+  if (diff < week) return `${Math.floor(diff / day)}d ago`;
+  return formatDateShort(iso); // older than a week → show absolute date
+}
+
+const FILE_ICONS: Record<string, string> = {
+  pdf: "📕",
+  docx: "📘", doc: "📘",
+  xlsx: "📗", xls: "📗", csv: "📗",
+  pptx: "📙", ppt: "📙",
+  png: "🖼️", jpg: "🖼️", jpeg: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️",
+  mp4: "🎬", mov: "🎬", webm: "🎬",
+  mp3: "🎵", wav: "🎵", m4a: "🎵",
+  zip: "🗜️", tar: "🗜️", gz: "🗜️", rar: "🗜️",
+  txt: "📄", md: "📄", rtf: "📄",
+};
+
+function iconForItem(item: { fileExtension?: string; itemType?: string }): string {
+  if (item.itemType === "link") return "🔗";
+  if (item.itemType === "email_reference") return "✉️";
+  if (item.itemType === "note") return "📝";
+  const ext = (item.fileExtension || "").replace(/^\./, "").toLowerCase();
+  return FILE_ICONS[ext] || "📄";
+}
+
 function greetingKeyForHour(hour: number): TKey {
   if (hour < 5) return "home.greetingNight";
   if (hour < 12) return "home.greetingMorning";
@@ -202,7 +236,7 @@ export default function HomeTab() {
             <div className="home-panel-list">
               {pinnedItems.slice(0, 6).map((item) => (
                 <div key={item.id} className="home-panel-row" onClick={() => goTo("files")}>
-                  <span className="home-panel-row-icon">{"\uD83D\uDCCC"}</span>
+                  <span className="home-panel-row-icon">{iconForItem(item)}</span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
                     <p className="home-panel-row-sub">{item.fileExtension ? item.fileExtension.toUpperCase() : item.itemType}</p>
@@ -265,12 +299,12 @@ export default function HomeTab() {
             <div className="home-panel-list">
               {recentFiles.slice(0, 6).map((item) => (
                 <div key={item.id} className="home-panel-row" onClick={() => goTo("files")}>
-                  <span className="home-panel-row-icon">{item.fileExtension ? "\uD83D\uDCC4" : "\uD83D\uDCDD"}</span>
+                  <span className="home-panel-row-icon">{iconForItem(item)}</span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
                     <p className="home-panel-row-sub">
                       {item.fileExtension ? item.fileExtension.toUpperCase() + " \u2022 " : ""}
-                      {item.updatedAtIso ? formatDateShort(item.updatedAtIso) : formatDateShort(item.createdAtIso)}
+                      {formatRelative(item.updatedAtIso || item.createdAtIso)}
                     </p>
                   </div>
                 </div>
