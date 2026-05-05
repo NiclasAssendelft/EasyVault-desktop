@@ -207,12 +207,14 @@ export async function refreshCalendarFromRemote(): Promise<void> {
   if (!canUseRemoteData()) { console.warn("[calendar-refresh] skipped: no auth token"); return; }
   try {
     // Filter at the DB level by created_by — see refreshEmailFromRemote for why.
+    // Sort newest-first and pull up to 2000 so a multi-year backfill (now that
+    // sync-outlook-calendar widened its window) actually surfaces in the UI.
     const me = currentUserEmail();
     const events = await entityFilter<Record<string, unknown>>(
       "CalendarEvent",
       me ? { created_by: me } : {},
-      "start_time",
-      500,
+      "-start_time",
+      2000,
     );
     console.info(`[calendar-refresh] owned=${events.length} me="${me}"`);
     const sync = useSyncStore.getState();
