@@ -17,6 +17,7 @@ import { refreshAllRemoteData } from "../../services/deltaSyncService";
 import { invokeEdgeFunction } from "../../api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useT, t } from "../../i18n";
+import { useUpdateStore } from "../../stores/updateStore";
 
 export default function SettingsTab() {
   const email = useAuthStore((s) => s.email);
@@ -240,6 +241,8 @@ export default function SettingsTab() {
         )}
       </div>
 
+      <UpdateSection />
+
       <div className="dash-card">
         <h4>{tr("settings.capabilities")}</h4>
         <div className="actions-row">
@@ -257,5 +260,46 @@ export default function SettingsTab() {
         </p>
       )}
     </section>
+  );
+}
+
+function UpdateSection() {
+  const tr = useT();
+  const status = useUpdateStore((s) => s.status);
+  const currentVersion = useUpdateStore((s) => s.currentVersion);
+  const availableVersion = useUpdateStore((s) => s.availableVersion);
+  const errorMessage = useUpdateStore((s) => s.errorMessage);
+  const checkForUpdate = useUpdateStore((s) => s.checkForUpdate);
+
+  const isBusy = status === "checking" || status === "downloading" || status === "installing";
+  const headline = (() => {
+    if (status === "checking") return tr("settings.update.checking");
+    if (status === "up-to-date") return tr("settings.update.upToDate");
+    if (status === "available") return tr("settings.update.available", { version: availableVersion });
+    if (status === "downloading") return tr("settings.update.downloading");
+    if (status === "installing") return tr("settings.update.installing");
+    if (status === "ready-restart") return tr("settings.update.readyRestart");
+    if (status === "failed") return tr("settings.update.failed");
+    return tr("settings.update.idle");
+  })();
+
+  return (
+    <div className="dash-card">
+      <h4>{tr("settings.update.title")}</h4>
+      <p style={{ color: "#71717a", fontSize: 13, marginBottom: 4 }}>{headline}</p>
+      {currentVersion && (
+        <p style={{ color: "#52525b", fontSize: 12, marginBottom: 12 }}>
+          {tr("settings.update.installedVersion", { version: currentVersion })}
+        </p>
+      )}
+      {status === "failed" && errorMessage && (
+        <p style={{ color: "#fca5a5", fontSize: 12, marginBottom: 12 }}>{errorMessage}</p>
+      )}
+      <div className="actions-row">
+        <button type="button" onClick={() => checkForUpdate(false)} disabled={isBusy}>
+          {isBusy ? tr("settings.update.busy") : tr("settings.update.checkNow")}
+        </button>
+      </div>
+    </div>
   );
 }

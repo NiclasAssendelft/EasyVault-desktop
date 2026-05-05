@@ -402,6 +402,18 @@ const fi: Record<keyof typeof en, string> = {
   "settings.outlookConnectFailed": "Outlook-yhdistäminen epäonnistui: {{error}}",
   "settings.outlookDisconnected": "Outlook-yhteys katkaistu",
   "settings.outlookDisconnectFailed": "Outlook-yhteyden katkaiseminen epäonnistui: {{error}}",
+  "settings.update.title": "Sovelluspäivitykset",
+  "settings.update.idle": "Klikkaa \"Tarkista päivitykset\" etsiäksesi uudemman version.",
+  "settings.update.checking": "Tarkistetaan päivityksiä…",
+  "settings.update.upToDate": "Käytössä on uusin versio.",
+  "settings.update.available": "Versio {{version}} on saatavilla — käytä yläpalkkia asentaaksesi tai ladataksesi.",
+  "settings.update.downloading": "Ladataan päivitystä…",
+  "settings.update.installing": "Asennetaan päivitystä…",
+  "settings.update.readyRestart": "Päivitys asennettu — sulje ja avaa EasyVault uudelleen käyttääksesi sitä.",
+  "settings.update.failed": "Automaattinen päivitys ei onnistunut. Käytä yläpalkkia ladataksesi asennusohjelman manuaalisesti.",
+  "settings.update.installedVersion": "Asennettu versio: v{{version}}",
+  "settings.update.checkNow": "Tarkista päivitykset",
+  "settings.update.busy": "Työstetään…",
 
   // NewModal
   "new.titleFolder": "Uusi kansio",

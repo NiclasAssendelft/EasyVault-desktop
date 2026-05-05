@@ -11,7 +11,7 @@ import {
   refreshDropzoneFromRemote,
 } from "../services/deltaSyncService";
 import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/onlyofficeService";
-import { check } from "@tauri-apps/plugin-updater";
+import { useUpdateStore } from "../stores/updateStore";
 import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
 import { invokeEdgeFunction } from "../api";
 import { getEmailSyncCount } from "../storage";
@@ -20,6 +20,7 @@ import { useDeltaSync } from "../hooks/useDeltaSync";
 import { useLocaleStore, type Locale } from "../i18n";
 import Sidebar from "./Sidebar";
 import ErrorBoundary from "./ErrorBoundary";
+import UpdateBanner from "./UpdateBanner";
 const HomeTab = lazy(() => import("./tabs/HomeTab"));
 const FilesTab = lazy(() => import("./tabs/FilesTab"));
 const EmailTab = lazy(() => import("./tabs/EmailTab"));
@@ -233,22 +234,15 @@ export default function WorkspaceLayout() {
     };
   }, []);
 
-  // Check for app updates on startup
+  // Check for app updates on startup. The banner UI in <UpdateBanner /> picks
+  // up the result and lets the user install or grab the DMG manually.
   useEffect(() => {
-    (async () => {
-      try {
-        const update = await check();
-        if (update) {
-          const yes = window.confirm(`EasyVault ${update.version} is available. Download and install?`);
-          if (yes) {
-            await update.downloadAndInstall();
-            window.alert("Update installed. Please restart EasyVault to use the new version.");
-          }
-        }
-      } catch (e) {
-        console.warn("Update check failed:", e);
-      }
-    })();
+    void useUpdateStore.getState().checkForUpdate(true);
+    // Re-check every 6 hours in case the app stays open.
+    const id = window.setInterval(() => {
+      void useUpdateStore.getState().checkForUpdate(true);
+    }, 6 * 60 * 60 * 1000);
+    return () => window.clearInterval(id);
   }, []);
 
   // Start/stop watch folder polling
@@ -321,6 +315,7 @@ export default function WorkspaceLayout() {
           <GlobalSearch />
           <LocaleDropdown locale={locale} setLocale={setLocale} />
         </header>
+        <UpdateBanner />
         <ErrorBoundary>
           <Suspense fallback={<div className="tab-loading">Loading…</div>}>
             <ActiveTabComponent />

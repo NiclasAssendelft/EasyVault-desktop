@@ -402,6 +402,18 @@ const en = {
   "settings.outlookConnectFailed": "Failed to connect Outlook: {{error}}",
   "settings.outlookDisconnected": "Outlook disconnected",
   "settings.outlookDisconnectFailed": "Failed to disconnect Outlook: {{error}}",
+  "settings.update.title": "App updates",
+  "settings.update.idle": "Click \"Check for updates\" to look for a newer version.",
+  "settings.update.checking": "Checking for updates…",
+  "settings.update.upToDate": "You're on the latest version.",
+  "settings.update.available": "Version {{version}} is available — see the banner above to install or download.",
+  "settings.update.downloading": "Downloading update…",
+  "settings.update.installing": "Installing update…",
+  "settings.update.readyRestart": "Update installed — quit and reopen EasyVault to use it.",
+  "settings.update.failed": "Auto-update couldn't finish. Use the banner above to download the installer manually.",
+  "settings.update.installedVersion": "Currently installed: v{{version}}",
+  "settings.update.checkNow": "Check for updates",
+  "settings.update.busy": "Working…",
 
   // NewModal
   "new.titleFolder": "New Folder",

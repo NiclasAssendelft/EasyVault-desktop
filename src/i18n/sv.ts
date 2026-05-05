@@ -402,6 +402,18 @@ const sv: Record<keyof typeof en, string> = {
   "settings.outlookConnectFailed": "Kunde inte ansluta Outlook: {{error}}",
   "settings.outlookDisconnected": "Outlook frånkopplad",
   "settings.outlookDisconnectFailed": "Kunde inte koppla från Outlook: {{error}}",
+  "settings.update.title": "Appuppdateringar",
+  "settings.update.idle": "Klicka på \"Sök efter uppdateringar\" för att leta efter en nyare version.",
+  "settings.update.checking": "Söker efter uppdateringar…",
+  "settings.update.upToDate": "Du har senaste versionen.",
+  "settings.update.available": "Version {{version}} finns tillgänglig — använd panelen ovan för att installera eller ladda ner.",
+  "settings.update.downloading": "Laddar ner uppdatering…",
+  "settings.update.installing": "Installerar uppdatering…",
+  "settings.update.readyRestart": "Uppdateringen är installerad — stäng och öppna EasyVault på nytt för att använda den.",
+  "settings.update.failed": "Automatisk uppdatering misslyckades. Använd panelen ovan för att ladda ner installeraren manuellt.",
+  "settings.update.installedVersion": "Installerad version: v{{version}}",
+  "settings.update.checkNow": "Sök efter uppdateringar",
+  "settings.update.busy": "Arbetar…",
 
   // NewModal
   "new.titleFolder": "Ny mapp",
