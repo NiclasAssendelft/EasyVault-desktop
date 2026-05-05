@@ -274,8 +274,10 @@ export default function WorkspaceLayout() {
       try {
         const status = await invokeEdgeFunction("outlookStatus", {}) as { connected?: boolean };
         if (!status.connected) return;
-        const limit = getEmailSyncCount();
-        await invokeEdgeFunction("syncOutlookEmails", { limit });
+        // Per-page = 200, total = 10k. Lets a first-sync backfill an entire
+        // mailbox while keeping each page small enough for Graph to be quick.
+        const limit = Math.max(getEmailSyncCount(), 200);
+        await invokeEdgeFunction("syncOutlookEmails", { limit, maxTotal: 10000 });
         await invokeEdgeFunction("syncOutlookCalendar", {});
         await refreshEmailFromRemote();
         await refreshCalendarFromRemote();
