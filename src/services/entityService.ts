@@ -65,7 +65,11 @@ export async function safeEntityUpdate(
       if (unsupported.length === 0) throw err;
       for (const field of unsupported) sync.addUnsupportedField(entity, field);
       candidate = useSyncStore.getState().sanitizePayload(entity, candidate);
-      if (Object.keys(candidate).length === 0) return null;
+      if (Object.keys(candidate).length === 0) {
+        // Every field was stripped as unsupported — no write would happen.
+        // Throw instead of returning null so the edit is not silently dropped.
+        throw new Error(`Update dropped for ${entity}: no supported fields remain after sanitizing (last error: ${String(err)})`);
+      }
     }
   }
 }

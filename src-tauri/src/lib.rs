@@ -46,7 +46,7 @@ fn fetch_page_title(url: &str) -> Result<String, String> {
     }
     // Read up to 64KB to find the title
     let body = resp.text().map_err(|e| format!("Read failed: {e}"))?;
-    let search = if body.len() > 65536 { &body[..65536] } else { &body };
+    let search = body.get(..65536).unwrap_or(&body);
     // Simple regex-free extraction
     if let Some(start) = search.to_lowercase().find("<title") {
         let after = &search[start..];
@@ -289,7 +289,7 @@ fn editor_config_store() -> &'static Mutex<HashMap<String, String>> {
 
 #[tauri::command]
 fn store_onlyoffice_editor_config(config_json: String) -> Result<String, String> {
-    let session_id = format!("{:016x}", rand_u64());
+    let session_id = random_session_id();
     let mut guard = editor_config_store()
         .lock()
         .map_err(|_| "editor config lock poisoned".to_string())?;
@@ -303,19 +303,13 @@ fn store_onlyoffice_editor_config(config_json: String) -> Result<String, String>
     Ok(session_id)
 }
 
-/// Simple pseudo-random u64 using system time (no external crate needed)
-fn rand_u64() -> u64 {
-    use std::time::SystemTime;
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    // Mix bits for better distribution
-    let mut x = nanos as u64;
-    x ^= x >> 13;
-    x = x.wrapping_mul(0x2545F4914F6CDD1D);
-    x ^= x >> 27;
-    x
+/// Cryptographically-strong random session id (128-bit, hex-encoded).
+/// Used as the only guard on the unauthenticated /editor-config endpoint,
+/// so it must be unguessable — never derive it from wall-clock time.
+fn random_session_id() -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("OS RNG unavailable");
+    hex::encode(bytes)
 }
 
 fn relay_stats_store() -> &'static Mutex<OnlyofficeRelayStats> {

@@ -229,13 +229,6 @@ export async function ensureFreshToken(): Promise<string> {
   return _refreshPromise;
 }
 
-function withAuthToken(explicitToken?: string): string {
-  if (explicitToken) return explicitToken;
-  const stored = localStorage.getItem("easyvault_token");
-  if (!stored) throw new Error("Missing auth token");
-  return stored;
-}
-
 // ── Supabase PostgREST helpers ──────────────────────────────────────
 
 function sortToPostgrest(sort: string): string {
@@ -275,7 +268,7 @@ export async function invokeEdgeFunction<T = unknown>(
   // Use anon key as Bearer so Supabase infrastructure accepts the request.
   // Pass the actual user token in the body for resolveUser() to validate.
   // Prefer extension token (never expires) over JWT.
-  const userToken = token || getExtensionToken() || getAuthToken() || "";
+  const userToken = token || getExtensionToken() || (await ensureFreshToken()) || "";
   const res = await tauriFetch(url, {
     method: "POST",
     headers: supabaseHeaders(SUPABASE_ANON_KEY),
@@ -347,7 +340,7 @@ export async function callDesktopSave<T = Record<string, unknown>>(
       id,
       patch,
       last_known_updated_date: lastKnownUpdatedDate,
-      token: token || withAuthToken(),
+      token: token || (await ensureFreshToken()),
     }),
   });
 
