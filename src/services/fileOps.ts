@@ -26,6 +26,7 @@ export async function uploadSelectedFilesToFolder(targetFolderId: string, preSup
     document.body.appendChild(picker);
     files = await new Promise<File[]>((resolve) => {
       picker.addEventListener("change", () => resolve(picker.files ? Array.from(picker.files) : []), { once: true });
+      picker.addEventListener("cancel", () => resolve([]), { once: true });
       picker.click();
     });
     picker.remove();
@@ -123,6 +124,7 @@ export async function uploadSelectedFilesToSpace(spaceId: string, preSuppliedFil
     document.body.appendChild(picker);
     files = await new Promise<File[]>((resolve) => {
       picker.addEventListener("change", () => resolve(picker.files ? Array.from(picker.files) : []), { once: true });
+      picker.addEventListener("cancel", () => resolve([]), { once: true });
       picker.click();
     });
     picker.remove();

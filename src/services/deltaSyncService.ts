@@ -41,8 +41,11 @@ export async function refreshAccessScope(): Promise<void> {
     const spaceIds = Array.isArray(payload?.space_ids) ? payload.space_ids : [];
     const personalId = asString(payload?.personal_space_id);
     useAuthStore.getState().setAccessScope(spaceIds, personalId);
-  } catch {
-    useAuthStore.getState().setAccessScope([], "");
+  } catch (err) {
+    // Keep the previously known scope on transient failure. Wiping it fails
+    // open (empty accessibleSpaceIds = allow-all in spaceAllowed) and clears
+    // personalSpaceId, breaking uploads until the next successful refresh.
+    console.warn("access scope refresh failed; keeping previous scope", err);
   }
 }
 

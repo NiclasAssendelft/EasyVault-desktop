@@ -36,6 +36,8 @@ interface UiState {
   closeImportLinksModal: () => void;
 }
 
+let statusTimer: number | null = null;
+
 export const useUiStore = create<UiState>((set) => ({
   activeTab: "home",
   statusText: "idle",
@@ -52,9 +54,16 @@ export const useUiStore = create<UiState>((set) => ({
   importLinksModalOpen: false,
   setActiveTab: (tab) => set({ activeTab: tab }),
   setStatus: (text) => {
+    if (statusTimer !== null) {
+      clearTimeout(statusTimer);
+      statusTimer = null;
+    }
     set({ statusText: text });
     if (text && text !== "idle") {
-      setTimeout(() => set({ statusText: "idle" }), 3000);
+      statusTimer = window.setTimeout(() => {
+        statusTimer = null;
+        set({ statusText: "idle" });
+      }, 3000);
     }
   },
   setCurrentFile: (text) => set({ currentFile: text }),

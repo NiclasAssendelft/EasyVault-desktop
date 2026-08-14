@@ -113,7 +113,7 @@ All remote data flows through Supabase, split two ways (see `api.ts`):
 
 ## Rust / Tauri backend (`src-tauri/`)
 
-`src/main.rs` (6 lines) calls `easyvault_lib::run()`. All logic is in **`src/lib.rs` (~1167 lines, single file, no tests)**. (Note: `tauri.conf.json` version is 0.3.10 but `Cargo.toml` is 0.3.0 — the Cargo version is likely stale; `pnpm release` syncs `package.json` + `tauri.conf.json`.)
+`src/main.rs` (6 lines) calls `easyvault_lib::run()`. All logic is in **`src/lib.rs` (~1180 lines, single file, no tests)**. `pnpm release` syncs the version across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `Cargo.lock`.
 
 ### IPC commands (`#[tauri::command]`, 12 total)
 File I/O: `save_file_to_workspace` (sanitizes ids/names, writes to `$HOME/EasyVault Workspace/{file_id}/{filename}`), `download_and_save_to_workspace` (blocking reqwest GET straight to disk), `get_file_stat`, `read_file_bytes`. Watch folder: `get_default_watch_folder` (`$HOME/Downloads/ToEasyVault`), `list_folder_files`. Misc: `fetch_page_title` (link bookmarking), `fetch_text` (CORS-bypass GET). ONLYOFFICE: `get_onlyoffice_relay_info`, `get_onlyoffice_relay_stats`, `set_onlyoffice_relay_auth` (stores the user JWT in a global `OnceLock<Mutex<Option<RelayAuth>>>`), `store_onlyoffice_editor_config` (keyed by a pseudo-random session id, ≤5 entries).

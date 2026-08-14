@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Release helper — bumps version in package.json + tauri.conf.json,
- * commits, tags, and pushes so GitHub Actions builds the release.
+ * Release helper — bumps version in package.json + tauri.conf.json +
+ * src-tauri/Cargo.toml, commits, tags, and pushes so GitHub Actions
+ * builds the release.
  *
  * Usage:
  *   node scripts/release.mjs patch   # 0.1.0 → 0.1.1
@@ -21,6 +22,7 @@ const root = resolve(__dirname, "..");
 
 const PKG_PATH = resolve(root, "package.json");
 const TAURI_PATH = resolve(root, "src-tauri/tauri.conf.json");
+const CARGO_PATH = resolve(root, "src-tauri/Cargo.toml");
 
 function readJSON(path) {
   return JSON.parse(readFileSync(path, "utf-8"));
@@ -68,11 +70,22 @@ writeJSON(PKG_PATH, pkg);
 tauri.version = newVersion;
 writeJSON(TAURI_PATH, tauri);
 
+const cargoToml = readFileSync(CARGO_PATH, "utf-8");
+if (!/^version = "\d+\.\d+\.\d+"$/m.test(cargoToml)) {
+  console.error("Could not find [package] version in Cargo.toml");
+  process.exit(1);
+}
+writeFileSync(CARGO_PATH, cargoToml.replace(/^version = ".*"$/m, `version = "${newVersion}"`));
+
 console.log(`  ✅ Updated package.json`);
-console.log(`  ✅ Updated tauri.conf.json\n`);
+console.log(`  ✅ Updated tauri.conf.json`);
+console.log(`  ✅ Updated Cargo.toml\n`);
+
+// Sync Cargo.lock's easyvault entry to the new version
+run(`cargo update --package easyvault --manifest-path src-tauri/Cargo.toml`);
 
 // Git commit, tag, push
-run(`git add package.json src-tauri/tauri.conf.json`);
+run(`git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock`);
 run(`git commit -m "release: v${newVersion}"`);
 run(`git tag v${newVersion}`);
 run(`git push`);

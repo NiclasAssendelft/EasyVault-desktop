@@ -71,13 +71,21 @@ fn fetch_page_title(url: &str) -> Result<String, String> {
     Err("No title found".to_string())
 }
 
+/// Resolve the user's home directory. HOME is absent on native Windows,
+/// where USERPROFILE is the equivalent.
+fn resolve_home_dir() -> Result<String, String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Could not resolve home directory (HOME/USERPROFILE not set)".to_string())
+}
+
 #[tauri::command]
 fn save_file_to_workspace(file_id: &str, filename: &str, bytes: Vec<u8>) -> Result<String, String> {
     save_file_to_workspace_inner(file_id, filename, &bytes)
 }
 
 fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> Result<String, String> {
-    let home_dir = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
+    let home_dir = resolve_home_dir()?;
 
     let safe_file_id: String = file_id
         .chars()
@@ -153,7 +161,7 @@ fn read_file_bytes(path: &str) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn get_default_watch_folder() -> Result<String, String> {
-    let home_dir = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
+    let home_dir = resolve_home_dir()?;
     let mut dir = PathBuf::from(home_dir);
     dir.push("Downloads");
     dir.push("ToEasyVault");

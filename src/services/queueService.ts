@@ -13,11 +13,26 @@ function fileSignature(file: LocalFolderFile): string {
   return `${file.path}|${file.size}|${file.modified_ms}`;
 }
 
+let lastScanErrorMsg = "";
+
 export async function scanWatchFolder(): Promise<void> {
   if (!getWatchEnabled()) return;
   const folder = getWatchFolder();
   if (!folder) return;
-  const files = await invoke<LocalFolderFile[]>("list_folder_files", { path: folder });
+  let files: LocalFolderFile[];
+  try {
+    files = await invoke<LocalFolderFile[]>("list_folder_files", { path: folder });
+    lastScanErrorMsg = "";
+  } catch (err) {
+    // Polled every 4s — log each distinct failure once instead of rejecting
+    // unhandled (and spamming) every tick when the folder is unreadable.
+    const msg = String(err);
+    if (msg !== lastScanErrorMsg) {
+      lastScanErrorMsg = msg;
+      console.warn("watch folder scan failed:", msg);
+    }
+    return;
+  }
   const store = useQueueStore.getState();
   for (const file of files) {
     if (!SUPPORTED_IMPORT_EXT.has(extOf(file.name))) continue;
