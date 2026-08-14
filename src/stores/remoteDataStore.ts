@@ -4,6 +4,13 @@ import { loadJson } from "../services/helpers";
 const EVENTS_CACHE_KEY = "ev.remote.events";
 const EMAILS_CACHE_KEY = "ev.remote.emails";
 
+/** Parse a cached array from localStorage, dropping non-array values and non-object entries. */
+function loadJsonArray<T extends object>(key: string): T[] {
+  const parsed = loadJson<unknown>(key, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((entry): entry is T => typeof entry === "object" && entry !== null);
+}
+
 interface RemoteDataState {
   emails: Record<string, unknown>[];
   events: Record<string, unknown>[];
@@ -15,11 +22,12 @@ interface RemoteDataState {
   setPacks: (data: Record<string, unknown>[]) => void;
   setSpaces: (data: Record<string, unknown>[]) => void;
   setDropzoneItems: (data: Record<string, unknown>[]) => void;
+  reset: () => void;
 }
 
 export const useRemoteDataStore = create<RemoteDataState>((set) => ({
-  emails: loadJson<Record<string, unknown>[]>(EMAILS_CACHE_KEY, []),
-  events: loadJson<Record<string, unknown>[]>(EVENTS_CACHE_KEY, []),
+  emails: loadJsonArray<Record<string, unknown>>(EMAILS_CACHE_KEY),
+  events: loadJsonArray<Record<string, unknown>>(EVENTS_CACHE_KEY),
   packs: [],
   spaces: [],
   dropzoneItems: [],
@@ -34,4 +42,10 @@ export const useRemoteDataStore = create<RemoteDataState>((set) => ({
   setPacks: (data) => set({ packs: data }),
   setSpaces: (data) => set({ spaces: data }),
   setDropzoneItems: (data) => set({ dropzoneItems: data }),
+  /** Clear all remote caches (in memory + localStorage). Used on logout. */
+  reset: () => {
+    set({ emails: [], events: [], packs: [], spaces: [], dropzoneItems: [] });
+    localStorage.removeItem(EMAILS_CACHE_KEY);
+    localStorage.removeItem(EVENTS_CACHE_KEY);
+  },
 }));

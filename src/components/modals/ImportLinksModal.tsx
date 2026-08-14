@@ -71,10 +71,10 @@ export default function ImportLinksModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={close} />
-      <div className="modal-panel">
+      <div className="modal-panel" role="dialog" aria-modal="true" aria-label={t("importLinks.title")}>
         <div className="modal-head">
           <h3>{t("importLinks.title")}</h3>
-          <button type="button" className="ghost" onClick={close}>&#x2715;</button>
+          <button type="button" className="ghost" onClick={close} aria-label={t("common.close")}>&#x2715;</button>
         </div>
         <form className="form" onSubmit={handleImport}>
           <p className="import-links-desc">{t("importLinks.desc")}</p>

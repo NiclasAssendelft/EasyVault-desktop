@@ -100,10 +100,10 @@ export default function NewModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={handleClose} />
-      <div className="modal-panel">
+      <div className="modal-panel" role="dialog" aria-modal="true" aria-label={createMode === "folder" ? t("new.titleFolder") : createMode === "item" ? t("new.titleItem") : t("new.titleCreate")}>
         <div className="modal-head">
           <h3>{createMode === "folder" ? t("new.titleFolder") : createMode === "item" ? t("new.titleItem") : t("new.titleCreate")}</h3>
-          <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
+          <button type="button" className="ghost" onClick={handleClose} aria-label={t("common.close")}>&#x2715;</button>
         </div>
 
         {createMode === null && (

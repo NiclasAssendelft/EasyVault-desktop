@@ -6,11 +6,31 @@ import {
   type FileItemType, type DesktopItem,
 } from "./helpers";
 import { canUseRemoteData } from "./entityService";
+import { t } from "../i18n";
 import { useAuthStore } from "../stores/authStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useRemoteDataStore } from "../stores/remoteDataStore";
 import { useSyncStore } from "../stores/syncStore";
+import { useUiStore } from "../stores/uiStore";
 
+
+// Serialize full-snapshot refreshes and delta applies over the files store so
+// they can never interleave. Without this, a snapshot fetched *before* a delta
+// change was applied can resolve *after* it and overwrite the store with stale
+// rows — and since the delta bookmark has already advanced past the change, it
+// stays lost until the next full refresh. Running each fetch+apply atomically
+// in a chain guarantees any snapshot fetch starts after all previously applied
+// delta changes were committed server-side, so the snapshot includes them.
+let syncChain: Promise<void> = Promise.resolve();
+
+function serialized<T>(fn: () => Promise<T>): Promise<T> {
+  const run = syncChain.then(fn, fn);
+  syncChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 function currentUserEmail(): string {
   return getSavedEmail().trim().toLowerCase();
@@ -75,7 +95,11 @@ async function cleanupOnlyofficeRelayTempItems(items: DesktopItem[]): Promise<vo
   }
 }
 
-export async function refreshFilesFromRemote(): Promise<void> {
+export function refreshFilesFromRemote(): Promise<void> {
+  return serialized(refreshFilesFromRemoteInner);
+}
+
+async function refreshFilesFromRemoteInner(): Promise<void> {
   if (!canUseRemoteData()) return;
   await refreshAccessScope();
   try {
@@ -314,12 +338,32 @@ export async function refreshAllRemoteData(): Promise<void> {
   ]);
 }
 
-export async function syncRemoteDelta(): Promise<void> {
+/** Consecutive delta-sync failures (module state; any success resets it). */
+let deltaFailureStreak = 0;
+
+/** Record a successful delta sync: one-shot "restored" notice after an outage, reset streak, stamp lastSync. */
+function recordDeltaSyncSuccess(): void {
+  if (deltaFailureStreak >= 2) {
+    useUiStore.getState().setStatus(t("status.syncRestored"));
+  }
+  deltaFailureStreak = 0;
+  useUiStore.getState().setLastSync(new Date().toLocaleTimeString());
+}
+
+export function syncRemoteDelta(): Promise<void> {
+  return serialized(syncRemoteDeltaInner);
+}
+
+async function syncRemoteDeltaInner(): Promise<void> {
   if (!canUseRemoteData()) return;
   const sync = useSyncStore.getState();
   try {
     const since = sync.lastDeltaSyncIso || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const result = await callDeltaSync(since);
+    // Success is recorded here, immediately after callDeltaSync resolves — NOT
+    // at the end of the try block, because the no-changes paths below
+    // early-return and would otherwise skip it.
+    recordDeltaSyncSuccess();
     if (!result || typeof result !== "object") return;
     const obj = result as Record<string, unknown>;
     const serverTime = asString(obj.server_time);
@@ -501,6 +545,12 @@ export async function syncRemoteDelta(): Promise<void> {
     useFilesStore.getState().persist();
   } catch (err) {
     console.warn("delta sync failed:", err);
+    deltaFailureStreak += 1;
+    if (deltaFailureStreak === 2) {
+      // One-shot notice on the 2nd consecutive failure: a single blip stays
+      // silent, and a real outage surfaces once instead of every 15s tick.
+      useUiStore.getState().setStatus(t("status.syncOffline"));
+    }
   }
 }
 

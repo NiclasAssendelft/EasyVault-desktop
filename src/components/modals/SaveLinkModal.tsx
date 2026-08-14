@@ -129,10 +129,10 @@ export default function SaveLinkModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={close} />
-      <div className="modal-panel">
+      <div className="modal-panel" role="dialog" aria-modal="true" aria-label={editTargetId ? t("saveLink.editTitle") : t("saveLink.title")}>
         <div className="modal-head">
           <h3>{editTargetId ? t("saveLink.editTitle") : t("saveLink.title")}</h3>
-          <button type="button" className="ghost" onClick={close}>&#x2715;</button>
+          <button type="button" className="ghost" onClick={close} aria-label={t("common.close")}>&#x2715;</button>
         </div>
         <form className="form" onSubmit={handleSubmit}>
           <label>{t("saveLink.urlLabel")}</label>

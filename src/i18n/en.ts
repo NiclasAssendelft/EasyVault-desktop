@@ -415,6 +415,33 @@ const en = {
   "settings.update.checkNow": "Check for updates",
   "settings.update.busy": "Working…",
 
+  // UpdateBanner
+  "update.availableTitle": "Update available — v{{version}}",
+  "update.availableSub": "Install in-place, or grab the installer manually.",
+  "update.downloadingTitle": "Downloading v{{version}}…",
+  "update.progress": "{{done}} of {{total}} ({{pct}}%)",
+  "update.starting": "Starting…",
+  "update.installingTitle": "Installing…",
+  "update.installingSub": "Don't quit EasyVault.",
+  "update.readyTitle": "v{{version}} installed",
+  "update.readySub": "Restart EasyVault to start using the new version.",
+  "update.failedTitle": "Auto-update couldn't finish",
+  "update.failedSub": "{{error}} Download the installer manually instead.",
+  "update.genericError": "Something went wrong.",
+  "update.installNow": "Install now",
+  "update.downloadInstaller": "Download installer",
+  "update.dismiss": "Dismiss",
+
+  // Global search / shell
+  "search.placeholder": "Search files, emails, workspaces…",
+  "search.ariaLabel": "Global search",
+  "search.noSubject": "(No subject)",
+  "search.workspace": "Workspace",
+  "common.loading": "Loading…",
+  "errorBoundary.title": "Something went wrong",
+  "errorBoundary.tryAgain": "Try again",
+  "errorBoundary.reload": "Reload app",
+
   // NewModal
   "new.titleFolder": "New Folder",
   "new.titleItem": "New Item",
@@ -654,8 +681,14 @@ const en = {
   "workspaces.roleUpdated": "Role updated to {{role}}",
   "workspaces.roleUpdateFailed": "Failed to update role: {{error}}",
   "workspaces.deleteFailed": "Failed to delete workspace: {{error}}",
+  "workspaces.saveFailed": "Failed to save workspace settings: {{error}}",
   "workspaces.inviteLinkCopied": "Invite link copied!",
   "workspaces.inviteLinkFailed": "Failed to create invite link: {{error}}",
+  "workspaces.chatSendFailed": "Failed to send message: {{error}}",
+  "workspaces.pinFailed": "Failed to pin message: {{error}}",
+  "workspaces.taskAddFailed": "Failed to add task: {{error}}",
+  "workspaces.taskUpdateFailed": "Failed to update task: {{error}}",
+  "workspaces.taskDeleteFailed": "Failed to delete task: {{error}}",
   "workspaces.overviewTab": "Overview",
   "workspaces.filesTab": "Files",
   "workspaces.chatTab": "Chat",
@@ -775,6 +808,11 @@ const en = {
   "translate.copy": "Copy",
   "translate.copied": "Copied!",
   "translate.close": "Close",
+  "common.close": "Close",
+
+  // Status bar (sync health)
+  "status.syncOffline": "Sync offline — retrying...",
+  "status.syncRestored": "Sync restored",
 } as const;
 
 export default en;

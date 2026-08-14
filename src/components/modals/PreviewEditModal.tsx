@@ -261,13 +261,13 @@ export default function PreviewEditModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={handleClose} />
-      <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}${realKind === "pdf" ? " pdf-mode" : ""}`}>
+      <div className={`modal-panel preview-edit-panel${realKind === "office" && mode === "edit" ? " office-mode" : ""}${realKind === "pdf" ? " pdf-mode" : ""}`} role="dialog" aria-modal="true" aria-label={item.title}>
         <div className="modal-head">
           <div className="preview-edit-title-wrap">
             <h3>{mode === "preview" ? tr("previewEdit.preview") : tr("previewEdit.edit")}: {item.title}</h3>
             <p className="files-scope-label">{relativeTime ? tr("previewEdit.updated", { time: relativeTime }) : ""}</p>
           </div>
-          <button type="button" className="ghost" onClick={handleClose}>&#x2715;</button>
+          <button type="button" className="ghost" onClick={handleClose} aria-label={tr("common.close")}>&#x2715;</button>
         </div>
 
         {(persistedError || globalStatus || statusText) && (

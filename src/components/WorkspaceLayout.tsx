@@ -99,23 +99,23 @@ function GlobalSearch() {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    const out: { type: string; label: string; sub: string; tab: string }[] = [];
+    const out: { id: string; type: string; label: string; sub: string; tab: string }[] = [];
     for (const item of items) {
       if (item.title.toLowerCase().includes(q)) {
-        out.push({ type: "file", label: item.title, sub: item.itemType || "file", tab: "files" });
+        out.push({ id: item.id, type: "file", label: item.title, sub: item.itemType || "file", tab: "files" });
       }
     }
     for (const e of emails) {
       const subj = String(e.subject || "");
       const from = String(e.from_name || e.from_address || "");
       if (subj.toLowerCase().includes(q) || from.toLowerCase().includes(q)) {
-        out.push({ type: "email", label: subj || "(No subject)", sub: from, tab: "email" });
+        out.push({ id: String(e.id ?? subj), type: "email", label: subj || "(No subject)", sub: from, tab: "email" });
       }
     }
     for (const s of spaces) {
       const name = String(s.name || "");
       if (name.toLowerCase().includes(q)) {
-        out.push({ type: "space", label: name, sub: "Workspace", tab: "workspaces" });
+        out.push({ id: String(s.id ?? name), type: "space", label: name, sub: "Workspace", tab: "workspaces" });
       }
     }
     return out.slice(0, 10);
@@ -147,9 +147,9 @@ function GlobalSearch() {
       <kbd className="global-search-shortcut" aria-hidden="true">⌘K</kbd>
       {open && results.length > 0 && (
         <div className="global-search-results">
-          {results.map((r, i) => (
+          {results.map((r) => (
             <button
-              key={i}
+              key={`${r.type}-${r.id}`}
               className="global-search-result"
               onClick={() => {
                 setActiveTab(r.tab as Parameters<typeof setActiveTab>[0]);
@@ -208,12 +208,17 @@ function LocaleDropdown({ locale, setLocale }: { locale: Locale; setLocale: (l: 
   );
 }
 
+function StatusBar() {
+  const statusText = useUiStore((s) => s.statusText);
+  if (!statusText || statusText === "idle") return null;
+  return <div className="status-bar">{statusText}</div>;
+}
+
 export default function WorkspaceLayout() {
   const activeTab = useUiStore((s) => s.activeTab);
 
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
-  const statusText = useUiStore((s) => s.statusText);
-  const queueItems = useQueueStore((s) => s.items);
+  const hasQueued = useQueueStore((s) => s.items.some((x) => x.status === "queued" || x.status === "retrying"));
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
 
@@ -260,13 +265,14 @@ export default function WorkspaceLayout() {
     return () => window.removeEventListener("easyvault:scan-watch-folder", handler);
   }, []);
 
-  // Process queue whenever new items are queued
+  // Process queue whenever new items are queued. Selecting a boolean (not the
+  // items array) keeps upload-progress updates from re-rendering the shell;
+  // processQueue's single-runner loop picks up items added mid-run by itself.
   useEffect(() => {
-    const hasQueued = queueItems.some((x) => x.status === "queued");
     if (hasQueued) {
       void processQueue();
     }
-  }, [queueItems]);
+  }, [hasQueued]);
 
   // Auto-sync Outlook emails + calendar on startup and daily at 7 AM
   useEffect(() => {
@@ -323,9 +329,7 @@ export default function WorkspaceLayout() {
             <ActiveTabComponent />
           </Suspense>
         </ErrorBoundary>
-        {statusText && statusText !== "idle" && (
-          <div className="status-bar">{statusText}</div>
-        )}
+        <StatusBar />
       </section>
       <Suspense fallback={null}>
         <NewModal />

@@ -69,15 +69,20 @@ export function getUploadedWatchSignatures(): Set<string> {
   const raw = localStorage.getItem(STORAGE_KEYS.uploadedWatchSignatures);
   if (!raw) return new Set<string>();
   try {
-    const arr = JSON.parse(raw) as string[];
-    return new Set(arr);
+    const arr: unknown = JSON.parse(raw);
+    if (!Array.isArray(arr)) return new Set<string>();
+    return new Set(arr.filter((s): s is string => typeof s === "string"));
   } catch {
     return new Set<string>();
   }
 }
 
 export function saveUploadedWatchSignatures(signatures: Set<string>): void {
-  localStorage.setItem(STORAGE_KEYS.uploadedWatchSignatures, JSON.stringify(Array.from(signatures)));
+  try {
+    localStorage.setItem(STORAGE_KEYS.uploadedWatchSignatures, JSON.stringify(Array.from(signatures)));
+  } catch {
+    /* quota — in-memory set stays authoritative */
+  }
 }
 
 export function getOnlyofficeJwtSecret(): string {

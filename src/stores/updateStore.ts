@@ -56,6 +56,12 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         errorMessage: "",
       });
     } catch (err) {
+      if (silent) {
+        // Background check (startup / 6h timer) — fail quietly, e.g. when offline.
+        // Only explicit user-initiated checks may surface the failure banner.
+        console.warn("Silent update check failed:", err);
+        return;
+      }
       set({
         status: "failed",
         errorMessage: String(err).replace(/^Error:\s*/, ""),

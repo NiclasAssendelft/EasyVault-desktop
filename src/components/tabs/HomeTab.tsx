@@ -70,6 +70,18 @@ function firstNameFromEmail(email: string): string {
   return first.charAt(0).toUpperCase() + first.slice(1);
 }
 
+/** Makes a clickable <div> keyboard-accessible (Enter/Space activate). */
+function pressableProps(onActivate: () => void) {
+  return {
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onActivate(); }
+    },
+  };
+}
+
 export default function HomeTab() {
   const items = useFilesStore((s) => s.items);
   const events = useRemoteDataStore((s) => s.events);
@@ -149,27 +161,27 @@ export default function HomeTab() {
 
       {/* ── Navigation cards row ── */}
       <div className="home-nav-row">
-        <div className="home-nav-card" onClick={() => goTo("files")}>
+        <div className="home-nav-card" {...pressableProps(() => goTo("files"))}>
           <span className="home-nav-icon">{"\uD83D\uDCC1"}</span>
           <span className="home-nav-label">{t("home.files")}</span>
           <span className="home-nav-count">{items.length}</span>
         </div>
-        <div className="home-nav-card" onClick={() => goTo("email")}>
+        <div className="home-nav-card" {...pressableProps(() => goTo("email"))}>
           <span className="home-nav-icon">{"\u2709\uFE0F"}</span>
           <span className="home-nav-label">{t("home.emails")}</span>
           <span className="home-nav-count">{emails.length}</span>
         </div>
-        <div className="home-nav-card" onClick={() => goTo("calendar")}>
+        <div className="home-nav-card" {...pressableProps(() => goTo("calendar"))}>
           <span className="home-nav-icon">{"\uD83D\uDCC5"}</span>
           <span className="home-nav-label">{t("home.calendar")}</span>
           <span className="home-nav-count">{events.length}</span>
         </div>
-        <div className="home-nav-card" onClick={() => goTo("workspaces")}>
+        <div className="home-nav-card" {...pressableProps(() => goTo("workspaces"))}>
           <span className="home-nav-icon">{"\uD83D\uDC65"}</span>
           <span className="home-nav-label">{t("home.spaces")}</span>
           <span className="home-nav-count">{spaces.length}</span>
         </div>
-        <div className="home-nav-card" onClick={() => goTo("vault")}>
+        <div className="home-nav-card" {...pressableProps(() => goTo("vault"))}>
           <span className="home-nav-icon">{"\uD83D\uDCE6"}</span>
           <span className="home-nav-label">{t("home.gatherPacks")}</span>
           <span className="home-nav-count">{packs.length}</span>
@@ -235,7 +247,7 @@ export default function HomeTab() {
           ) : (
             <div className="home-panel-list">
               {pinnedItems.slice(0, 6).map((item) => (
-                <div key={item.id} className="home-panel-row" onClick={() => goTo("files")}>
+                <div key={item.id} className="home-panel-row" {...pressableProps(() => goTo("files"))}>
                   <span className="home-panel-row-icon">{iconForItem(item)}</span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
@@ -268,7 +280,7 @@ export default function HomeTab() {
                 const title = asString(ev.title, "—");
                 const start = asString(ev.start_time);
                 return (
-                  <div key={id} className="home-panel-row" onClick={() => goTo("calendar")}>
+                  <div key={id} className="home-panel-row" {...pressableProps(() => goTo("calendar"))}>
                     <span className="home-panel-row-icon">{"\uD83D\uDCC5"}</span>
                     <div className="home-panel-row-body">
                       <p className="home-panel-row-title">{title}</p>
@@ -298,7 +310,7 @@ export default function HomeTab() {
           ) : (
             <div className="home-panel-list">
               {recentFiles.slice(0, 6).map((item) => (
-                <div key={item.id} className="home-panel-row" onClick={() => goTo("files")}>
+                <div key={item.id} className="home-panel-row" {...pressableProps(() => goTo("files"))}>
                   <span className="home-panel-row-icon">{iconForItem(item)}</span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
@@ -332,7 +344,7 @@ export default function HomeTab() {
                 const subject = asString(email.subject, asString(email.title, "—"));
                 const from = asString(email.from_address, asString(email.sender, ""));
                 return (
-                  <div key={id} className="home-panel-row" onClick={() => goTo("email")}>
+                  <div key={id} className="home-panel-row" {...pressableProps(() => goTo("email"))}>
                     <span className="home-panel-row-icon">{"\u2757"}</span>
                     <div className="home-panel-row-body">
                       <p className="home-panel-row-title">{subject}</p>

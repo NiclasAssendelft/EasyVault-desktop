@@ -204,16 +204,16 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       setChatInput("");
       setReplyTo(null);
       await fetchChatMessages(activeSpaceId);
-    } catch { /* ignore */ }
+    } catch (err) { setStatus(t("workspaces.chatSendFailed", { error: String(err) })); }
     finally { setChatSending(false); }
-  }, [chatInput, activeSpaceId, me, replyTo, fetchChatMessages]);
+  }, [chatInput, activeSpaceId, me, replyTo, fetchChatMessages, setStatus]);
 
   const handlePinMessage = useCallback(async (msgId: string) => {
     try {
       await invokeEdgeFunction("spaceMessages", { space_id: activeSpaceId, action: "pin", pin_message_id: msgId });
       await fetchChatMessages(activeSpaceId);
-    } catch { /* ignore */ }
-  }, [activeSpaceId, fetchChatMessages]);
+    } catch (err) { setStatus(t("workspaces.pinFailed", { error: String(err) })); }
+  }, [activeSpaceId, fetchChatMessages, setStatus]);
 
   const handleInvite = useCallback(async () => {
     if (!inviteEmail.trim()) return;
@@ -252,7 +252,7 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       await safeEntityUpdate("Space", activeSpaceId, { name: editName.trim(), description: editDesc.trim() }, updatedAt);
       setStatus(t("settings.saved"));
       await refreshSharedFromRemote();
-    } catch (err) { setStatus(t("workspaces.deleteFailed", { error: String(err) })); }
+    } catch (err) { setStatus(t("workspaces.saveFailed", { error: String(err) })); }
   }, [space, activeSpaceId, editName, editDesc, setStatus]);
 
   const handleUpload = useCallback(async () => {
@@ -274,6 +274,7 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     type TauriEvent = { listen: (event: string, cb: (e: { payload: unknown }) => void) => Promise<() => void> };
     const tauriEvent = (window as unknown as { __TAURI__?: { event?: TauriEvent } }).__TAURI__?.event;
     if (!tauriEvent) return;
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
     void tauriEvent.listen("tauri://drag-drop", async (e) => {
       const payload = e.payload as { paths?: string[] };
@@ -293,8 +294,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
         try { await uploadSelectedFilesToSpace(activeSpaceId, files); await refreshSharedFromRemote(); }
         catch (err) { setStatus(String(err)); }
       }
-    }).then((u) => { unlisten = u; });
-    return () => { unlisten?.(); };
+    }).then((u) => { if (cancelled) { u(); } else { unlisten = u; } });
+    return () => { cancelled = true; unlisten?.(); };
   }, [activeSection, activeSpaceId, canEdit, setStatus]);
 
   const handleAddTask = useCallback(async () => {
@@ -303,22 +304,22 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "create", title: newTaskTitle.trim() });
       setNewTaskTitle("");
       await fetchTasks(activeSpaceId);
-    } catch { /* ignore */ }
-  }, [newTaskTitle, activeSpaceId, fetchTasks]);
+    } catch (err) { setStatus(t("workspaces.taskAddFailed", { error: String(err) })); }
+  }, [newTaskTitle, activeSpaceId, fetchTasks, setStatus]);
 
   const handleToggleTask = useCallback(async (taskId: string, completed: boolean) => {
     try {
       await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "update", task_id: taskId, is_completed: !completed });
       await fetchTasks(activeSpaceId);
-    } catch { /* ignore */ }
-  }, [activeSpaceId, fetchTasks]);
+    } catch (err) { setStatus(t("workspaces.taskUpdateFailed", { error: String(err) })); }
+  }, [activeSpaceId, fetchTasks, setStatus]);
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     try {
       await invokeEdgeFunction("spaceTasks", { space_id: activeSpaceId, action: "delete", task_id: taskId });
       await fetchTasks(activeSpaceId);
-    } catch { /* ignore */ }
-  }, [activeSpaceId, fetchTasks]);
+    } catch (err) { setStatus(t("workspaces.taskDeleteFailed", { error: String(err) })); }
+  }, [activeSpaceId, fetchTasks, setStatus]);
 
   const handleCopyInviteLink = useCallback(async () => {
     try {

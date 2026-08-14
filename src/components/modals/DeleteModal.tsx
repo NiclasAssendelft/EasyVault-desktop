@@ -94,7 +94,7 @@ export default function DeleteModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={deleting ? undefined : forceClose} />
-      <div className="modal-panel">
+      <div className="modal-panel" role="dialog" aria-modal="true" aria-label={target.kind === "folder" ? t("delete.titleFolder") : t("delete.titleItem")}>
         <div className="modal-head">
           <h3>{target.kind === "folder" ? t("delete.titleFolder") : t("delete.titleItem")}</h3>
         </div>

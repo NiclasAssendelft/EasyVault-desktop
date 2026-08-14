@@ -32,8 +32,8 @@ case "$OS" in
     echo "❌ Windows detected. Please download the .msi installer from:"
     echo "   https://github.com/$REPO/releases/latest"
     echo ""
-    echo "   Or run this in PowerShell:"
-    echo '   irm https://raw.githubusercontent.com/'"$REPO"'/main/install.ps1 | iex'
+    echo "   Look for the EasyVault .msi asset (e.g. EasyVault_x.y.z_x64_en-US.msi),"
+    echo "   download it, and double-click to install."
     exit 1
     ;;
   *)

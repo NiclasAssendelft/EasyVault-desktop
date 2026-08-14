@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { uploadFileWithToken } from "../api";
-import { getPreferredUploadToken, getWatchEnabled, getWatchFolder, getUploadedWatchSignatures, saveUploadedWatchSignatures } from "../storage";
+import { getPreferredUploadToken, getWatchEnabled, getWatchFolder } from "../storage";
 import { IMPORT_MAX_RETRIES, WATCH_FOLDER_POLL_MS } from "../config";
 import { SUPPORTED_IMPORT_EXT, extOf, sleep } from "./helpers";
 import { useQueueStore } from "../stores/queueStore";
@@ -14,6 +14,13 @@ function fileSignature(file: LocalFolderFile): string {
 }
 
 let lastScanErrorMsg = "";
+
+/**
+ * Per-item retry backoff: item id → epoch ms when the next attempt is due.
+ * No entry = due now. Kept module-local (instead of on ImportQueueItem) so the
+ * queue item type stays unchanged; entries are dropped when an item finishes.
+ */
+const retryDueAtMs = new Map<string, number>();
 
 export async function scanWatchFolder(): Promise<void> {
   if (!getWatchEnabled()) return;
@@ -58,11 +65,21 @@ export async function processQueue(): Promise<void> {
   store.setIsRunning(true);
   try {
     while (true) {
-      const item = useQueueStore.getState().items.find((x) => x.status === "queued" || x.status === "retrying");
-      if (!item) break;
+      const pending = useQueueStore.getState().items.filter((x) => x.status === "queued" || x.status === "retrying");
+      if (pending.length === 0) break;
+      const now = Date.now();
+      const item = pending.find((x) => (retryDueAtMs.get(x.id) ?? 0) <= now);
+      if (!item) {
+        // Every pending item is backing off. Wait a short slice and re-check
+        // so a freshly queued file is picked up right away instead of being
+        // blocked behind another file's backoff (head-of-line blocking).
+        await sleep(1000);
+        continue;
+      }
       const uploadToken = getPreferredUploadToken();
       if (!uploadToken) { console.warn("queue paused: missing token"); break; }
 
+      retryDueAtMs.delete(item.id);
       useQueueStore.getState().updateItem(item.id, { status: "uploading", attempts: item.attempts + 1, progress: 0, error: undefined });
 
       try {
@@ -74,9 +91,6 @@ export async function processQueue(): Promise<void> {
         });
         useQueueStore.getState().updateItem(item.id, { status: "done", progress: 100, finishedAtIso: new Date().toISOString() });
         useQueueStore.getState().markSignature(item.signature);
-        const sigs = getUploadedWatchSignatures();
-        sigs.add(item.signature);
-        saveUploadedWatchSignatures(sigs);
         console.log(`imported ${item.filename}`);
         if (canUseRemoteData()) {
           void refreshDropzoneFromRemote();
@@ -85,10 +99,10 @@ export async function processQueue(): Promise<void> {
       } catch (err) {
         const attempts = (useQueueStore.getState().items.find((x) => x.id === item.id)?.attempts) || item.attempts + 1;
         if (attempts < IMPORT_MAX_RETRIES) {
+          const backoffMs = Math.min(1000 * 2 ** (attempts - 1), 15000);
+          retryDueAtMs.set(item.id, Date.now() + backoffMs);
           useQueueStore.getState().updateItem(item.id, { status: "retrying", error: String(err) });
           console.warn(`retrying ${item.filename} (${attempts}/${IMPORT_MAX_RETRIES})`);
-          await sleep(Math.min(1000 * 2 ** (attempts - 1), 15000));
-          useQueueStore.getState().updateItem(item.id, { status: "queued" });
         } else {
           useQueueStore.getState().updateItem(item.id, { status: "failed", error: String(err) });
           console.warn(`import failed: ${item.filename}`);

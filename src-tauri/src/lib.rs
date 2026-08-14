@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -10,10 +9,17 @@ use reqwest::blocking::multipart;
 use sha2::{Digest, Sha256};
 
 /// Download a file from a URL and save directly to workspace — bypasses JS IPC byte transfer.
+/// Streams to disk (no whole-file RAM buffer). Explicit timeouts: 30s to connect, 600s
+/// overall — the blocking client's implicit default is 30s TOTAL, which would kill any
+/// large download; 600s bounds a stalled transfer without breaking slow links.
 #[tauri::command]
 fn download_and_save_to_workspace(url: &str, file_id: &str, filename: &str) -> Result<String, String> {
-    let client = reqwest::blocking::Client::new();
-    let resp = client
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| format!("Client error: {e}"))?;
+    let mut resp = client
         .get(url)
         .send()
         .map_err(|e| format!("Download failed: {e}"))?;
@@ -22,11 +28,28 @@ fn download_and_save_to_workspace(url: &str, file_id: &str, filename: &str) -> R
         return Err(format!("Download failed (HTTP {})", resp.status()));
     }
 
-    let bytes = resp
-        .bytes()
-        .map_err(|e| format!("Failed to read response body: {e}"))?;
+    let full_path = workspace_target_path(file_id, filename)?;
+    // Stream into a temp file first so a failed download never truncates or
+    // corrupts an existing workspace copy.
+    let tmp_name = format!(
+        "{}.evdownload",
+        full_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("download")
+    );
+    let tmp_path = full_path.with_file_name(tmp_name);
+    let mut file =
+        fs::File::create(&tmp_path).map_err(|e| format!("Failed to create file: {e}"))?;
+    if let Err(e) = resp.copy_to(&mut file) {
+        drop(file);
+        let _ = fs::remove_file(&tmp_path);
+        return Err(format!("Failed to write file: {e}"));
+    }
+    drop(file);
+    fs::rename(&tmp_path, &full_path).map_err(|e| format!("Failed to finalize file: {e}"))?;
 
-    save_file_to_workspace_inner(file_id, filename, &bytes)
+    Ok(full_path.to_string_lossy().to_string())
 }
 
 /// Fetch a URL and extract the <title> tag from the HTML response.
@@ -48,11 +71,11 @@ fn fetch_page_title(url: &str) -> Result<String, String> {
     let body = resp.text().map_err(|e| format!("Read failed: {e}"))?;
     let search = body.get(..65536).unwrap_or(&body);
     // Simple regex-free extraction
-    if let Some(start) = search.to_lowercase().find("<title") {
+    if let Some(start) = find_ascii_ci(search, "<title") {
         let after = &search[start..];
         if let Some(gt) = after.find('>') {
             let content = &after[gt + 1..];
-            if let Some(end) = content.to_lowercase().find("</title") {
+            if let Some(end) = find_ascii_ci(content, "</title") {
                 let title = content[..end].trim();
                 if !title.is_empty() {
                     // Decode basic HTML entities
@@ -71,6 +94,19 @@ fn fetch_page_title(url: &str) -> Result<String, String> {
     Err("No title found".to_string())
 }
 
+/// Case-insensitive ASCII substring search returning a byte offset valid for the
+/// ORIGINAL string (unlike to_lowercase(), which can change byte lengths on
+/// non-ASCII input, e.g. 'İ'). Needles must be pure ASCII; a match on an ASCII
+/// first byte is always a char boundary in the haystack.
+fn find_ascii_ci(haystack: &str, needle: &str) -> Option<usize> {
+    let h = haystack.as_bytes();
+    let n = needle.as_bytes();
+    if n.is_empty() || h.len() < n.len() {
+        return None;
+    }
+    h.windows(n.len()).position(|w| w.eq_ignore_ascii_case(n))
+}
+
 /// Resolve the user's home directory. HOME is absent on native Windows,
 /// where USERPROFILE is the equivalent.
 fn resolve_home_dir() -> Result<String, String> {
@@ -84,19 +120,22 @@ fn save_file_to_workspace(file_id: &str, filename: &str, bytes: Vec<u8>) -> Resu
     save_file_to_workspace_inner(file_id, filename, &bytes)
 }
 
-fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> Result<String, String> {
-    let home_dir = resolve_home_dir()?;
-
-    let safe_file_id: String = file_id
+/// Keep only characters safe for a workspace directory name; None if nothing remains.
+fn sanitize_file_id(file_id: &str) -> Option<String> {
+    let safe: String = file_id
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
-
-    if safe_file_id.is_empty() {
-        return Err("Invalid file_id".to_string());
+    if safe.is_empty() {
+        None
+    } else {
+        Some(safe)
     }
+}
 
-    let safe_filename: String = filename
+/// Replace path separators, drive colons and NUL with '_'; None if the result is blank.
+fn sanitize_filename(filename: &str) -> Option<String> {
+    let safe: String = filename
         .chars()
         .map(|c| {
             if c == '/' || c == '\\' || c == ':' || c == '\0' {
@@ -106,10 +145,26 @@ fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> 
             }
         })
         .collect();
-
-    if safe_filename.trim().is_empty() {
-        return Err("Invalid filename".to_string());
+    if safe.trim().is_empty() {
+        None
+    } else {
+        Some(safe)
     }
+}
+
+fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> Result<String, String> {
+    let full_path = workspace_target_path(file_id, filename)?;
+    fs::write(&full_path, bytes).map_err(|e| format!("Failed to write file: {e}"))?;
+    Ok(full_path.to_string_lossy().to_string())
+}
+
+/// Sanitize file_id/filename and return the target path inside the workspace,
+/// creating the per-file directory if needed.
+fn workspace_target_path(file_id: &str, filename: &str) -> Result<PathBuf, String> {
+    let home_dir = resolve_home_dir()?;
+
+    let safe_file_id = sanitize_file_id(file_id).ok_or_else(|| "Invalid file_id".to_string())?;
+    let safe_filename = sanitize_filename(filename).ok_or_else(|| "Invalid filename".to_string())?;
 
     let mut dir = PathBuf::from(home_dir);
     dir.push("EasyVault Workspace");
@@ -118,9 +173,7 @@ fn save_file_to_workspace_inner(file_id: &str, filename: &str, bytes: &[u8]) -> 
 
     let mut full_path = dir;
     full_path.push(safe_filename);
-    fs::write(&full_path, bytes).map_err(|e| format!("Failed to write file: {e}"))?;
-
-    Ok(full_path.to_string_lossy().to_string())
+    Ok(full_path)
 }
 
 #[derive(Serialize)]
@@ -157,6 +210,11 @@ fn get_file_stat(path: &str) -> Result<FileStat, String> {
 #[tauri::command]
 fn read_file_bytes(path: &str) -> Result<Vec<u8>, String> {
     fs::read(path).map_err(|e| format!("Failed to read file: {e}"))
+}
+
+#[tauri::command]
+fn get_cpu_arch() -> String {
+    std::env::consts::ARCH.into()
 }
 
 #[tauri::command]
@@ -290,9 +348,11 @@ fn set_onlyoffice_relay_auth(token: String, _api_key: Option<String>) -> Result<
 // Editor config store — holds temporary editor configs for the /editor page
 // ---------------------------------------------------------------------------
 
-fn editor_config_store() -> &'static Mutex<HashMap<String, String>> {
-    static STORE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
-    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+/// Insertion-ordered (FIFO) store so eviction genuinely drops the OLDEST session —
+/// HashMap iteration order is arbitrary. Max 5 entries, so O(n) lookup is trivial.
+fn editor_config_store() -> &'static Mutex<Vec<(String, String)>> {
+    static STORE: OnceLock<Mutex<Vec<(String, String)>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(Vec::new()))
 }
 
 #[tauri::command]
@@ -301,13 +361,11 @@ fn store_onlyoffice_editor_config(config_json: String) -> Result<String, String>
     let mut guard = editor_config_store()
         .lock()
         .map_err(|_| "editor config lock poisoned".to_string())?;
-    // Auto-clean: keep max 5 entries
+    // Auto-clean: keep max 5 entries, evicting the oldest first
     while guard.len() >= 5 {
-        if let Some(oldest_key) = guard.keys().next().cloned() {
-            guard.remove(&oldest_key);
-        }
+        guard.remove(0);
     }
-    guard.insert(session_id.clone(), config_json);
+    guard.push((session_id.clone(), config_json));
     Ok(session_id)
 }
 
@@ -364,8 +422,9 @@ fn is_hex_24(s: &str) -> bool {
 fn extract_file_id_from_key(key: &str) -> Option<String> {
     // Key format: "{uuid}_v{version}_{timestamp}" or "{hex24}_v{version}_{timestamp}"
     // Try UUID first (36 chars with dashes)
-    if key.len() >= 36 {
-        let candidate = &key[..36];
+    // key.get(..36) instead of key[..36]: byte-slicing panics when index 36 is
+    // not a char boundary (keys can carry multi-byte chars, e.g. bidi isolates).
+    if let Some(candidate) = key.get(..36) {
         if is_uuid(candidate) {
             return Some(candidate.to_string());
         }
@@ -707,13 +766,24 @@ fn start_onlyoffice_callback_relay() {
             }
         };
 
-        for mut request in server.incoming_requests() {
+        for request in server.incoming_requests() {
+            // One thread per request: a slow save callback (download + chunked
+            // upload) must not stall /editor or /editor-config for its duration.
+            // Request is Send, reqwest::blocking::Client clones share one pool,
+            // and all shared state lives behind OnceLock<Mutex<...>> statics.
+            let client = client.clone();
+            thread::spawn(move || handle_relay_request(request, client));
+        }
+    });
+}
+
+fn handle_relay_request(mut request: tiny_http::Request, client: reqwest::blocking::Client) {
             let path = request.url().to_string();
             let method = request.method().clone();
 
             if method == Method::Get && path == "/health" {
                 let _ = request.respond(Response::from_string("ok"));
-                continue;
+                return;
             }
 
             // ── /editor?id=XXX — serve the ONLYOFFICE editor HTML shell ──
@@ -802,7 +872,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     response = response.with_header(header);
                 }
                 let _ = request.respond(response);
-                continue;
+                return;
             }
 
             // ── /editor-config?id=XXX — return stored editor config JSON ──
@@ -812,7 +882,12 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     editor_config_store()
                         .lock()
                         .ok()
-                        .and_then(|store| store.get(query_id).cloned())
+                        .and_then(|store| {
+                            store
+                                .iter()
+                                .find(|(k, _)| k.as_str() == query_id)
+                                .map(|(_, v)| v.clone())
+                        })
                 } else {
                     None
                 };
@@ -832,7 +907,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                         );
                     }
                 }
-                continue;
+                return;
             }
 
             if method != Method::Post || path != "/onlyoffice-callback" {
@@ -840,7 +915,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     Response::from_string("not found")
                         .with_status_code(StatusCode(404)),
                 );
-                continue;
+                return;
             }
 
             let mut body = Vec::new();
@@ -853,7 +928,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     Response::from_string(r#"{"error":1,"message":"bad request"}"#)
                         .with_status_code(StatusCode(400)),
                 );
-                continue;
+                return;
             }
 
             if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
@@ -896,7 +971,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                         Response::from_string(r#"{"error":1,"message":"missing relay auth"}"#)
                                             .with_status_code(StatusCode(500)),
                                     );
-                                    continue;
+                                    return;
                                 }
                             };
 
@@ -925,7 +1000,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                             Response::from_string(r#"{"error":1,"message":"download bytes failed"}"#)
                                                 .with_status_code(StatusCode(502)),
                                         );
-                                        continue;
+                                        return;
                                     }
                                 },
                                 Err(e) => {
@@ -937,7 +1012,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                         Response::from_string(r#"{"error":1,"message":"download failed"}"#)
                                             .with_status_code(StatusCode(502)),
                                     );
-                                    continue;
+                                    return;
                                 }
                             };
 
@@ -954,7 +1029,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                         Response::from_string(format!(r#"{{"error":1,"message":"{}"}}"#, err))
                                             .with_status_code(StatusCode(502)),
                                     );
-                                    continue;
+                                    return;
                                 }
                             };
 
@@ -987,7 +1062,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                         ok = ok.with_header(header);
                                     }
                                     let _ = request.respond(ok);
-                                    continue;
+                                    return;
                                 } else {
                                     call_file_versions_fallback(&client, &auth, &file_id_guess, &upload_url, &bytes)
                                 };
@@ -1015,7 +1090,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                             ok = ok.with_header(header);
                                         }
                                         let _ = request.respond(ok);
-                                        continue;
+                                        return;
                                     }
                                     if let Ok(mut stats) = relay_stats_store().lock() {
                                         stats.last_error = Some(format!(
@@ -1035,7 +1110,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                         )
                                         .with_status_code(StatusCode(502)),
                                     );
-                                    continue;
+                                    return;
                                 }
                                 if let Ok(mut stats) = relay_stats_store().lock() {
                                     stats.last_upstream_status = Some(200);
@@ -1054,7 +1129,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                     ok = ok.with_header(header);
                                 }
                                 let _ = request.respond(ok);
-                                continue;
+                                return;
                             }
 
                             if let Ok(mut stats) = relay_stats_store().lock() {
@@ -1073,7 +1148,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                                 ok = ok.with_header(header);
                             }
                             let _ = request.respond(ok);
-                            continue;
+                            return;
                         }
                     }
                 }
@@ -1138,8 +1213,6 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     );
                 }
             }
-        }
-    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1162,8 +1235,210 @@ pub fn run() {
             get_onlyoffice_relay_stats,
             set_onlyoffice_relay_auth,
             fetch_text,
-            store_onlyoffice_editor_config
+            store_onlyoffice_editor_config,
+            get_cpu_arch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const UUID: &str = "0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d";
+    const HEX24: &str = "5f2b8c9d0e1f2a3b4c5d6e7f";
+
+    // ── parse_callback_status ──────────────────────────────────────────────
+
+    #[test]
+    fn parse_callback_status_accepts_integer() {
+        assert_eq!(parse_callback_status(&serde_json::json!(2)), Some(2));
+    }
+
+    #[test]
+    fn parse_callback_status_accepts_float() {
+        assert_eq!(parse_callback_status(&serde_json::json!(6.0)), Some(6));
+    }
+
+    #[test]
+    fn parse_callback_status_accepts_padded_string() {
+        assert_eq!(parse_callback_status(&serde_json::json!(" 6 ")), Some(6));
+    }
+
+    #[test]
+    fn parse_callback_status_rejects_null_and_garbage() {
+        assert_eq!(parse_callback_status(&serde_json::Value::Null), None);
+        assert_eq!(parse_callback_status(&serde_json::json!("abc")), None);
+        assert_eq!(parse_callback_status(&serde_json::json!({})), None);
+    }
+
+    // ── infer_office_ext_from_callback_url ─────────────────────────────────
+
+    #[test]
+    fn infer_ext_strips_query_string() {
+        assert_eq!(
+            infer_office_ext_from_callback_url("http://h/file.xlsx?token=x&y=1"),
+            "xlsx"
+        );
+    }
+
+    #[test]
+    fn infer_ext_is_case_insensitive() {
+        assert_eq!(infer_office_ext_from_callback_url("http://h/DECK.PPTX"), "pptx");
+    }
+
+    #[test]
+    fn infer_ext_defaults_to_docx() {
+        assert_eq!(infer_office_ext_from_callback_url("http://h/file.bin"), "docx");
+        assert_eq!(infer_office_ext_from_callback_url("http://h/noext"), "docx");
+    }
+
+    // ── is_uuid / is_hex_24 ────────────────────────────────────────────────
+
+    #[test]
+    fn is_uuid_accepts_valid_uuid() {
+        assert!(is_uuid(UUID));
+    }
+
+    #[test]
+    fn is_uuid_rejects_wrong_shape() {
+        assert!(!is_uuid("0a1b2c3d-4e5f-6a7b-8c9d0-e1f2a3b4c5d")); // dash misplaced
+        assert!(!is_uuid("za1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d")); // non-hex char
+        assert!(!is_uuid("0a1b2c3d-4e5f")); // too short
+        assert!(!is_uuid(""));
+    }
+
+    #[test]
+    fn is_hex_24_accepts_and_rejects() {
+        assert!(is_hex_24(HEX24));
+        assert!(!is_hex_24(&HEX24[..23]));
+        assert!(!is_hex_24("g".repeat(24).as_str()));
+    }
+
+    // ── extract_file_id_from_key ───────────────────────────────────────────
+
+    #[test]
+    fn extract_file_id_leading_uuid_key() {
+        let key = format!("{UUID}_v3_1699999999");
+        assert_eq!(extract_file_id_from_key(&key), Some(UUID.to_string()));
+    }
+
+    #[test]
+    fn extract_file_id_legacy_hex24_key() {
+        let key = format!("{HEX24}_v2_1699999999");
+        assert_eq!(extract_file_id_from_key(&key), Some(HEX24.to_string()));
+    }
+
+    #[test]
+    fn extract_file_id_embedded_uuid() {
+        let key = format!("prefix-{UUID}-suffix");
+        assert_eq!(extract_file_id_from_key(&key), Some(UUID.to_string()));
+    }
+
+    #[test]
+    fn extract_file_id_bidi_wrapped_uuid_key() {
+        // ONLYOFFICE keys observed wrapped in Unicode bidi isolate chars.
+        let key = format!("\u{2068}{UUID}_v3_1699999999\u{2069}");
+        assert_eq!(extract_file_id_from_key(&key), Some(UUID.to_string()));
+    }
+
+    #[test]
+    fn extract_file_id_multibyte_boundary_does_not_panic() {
+        // 35 ASCII chars + a 2-byte char: byte 36 is NOT a char boundary.
+        // ('z' is not a hex digit, so no hex24/uuid window can match.)
+        let key = format!("{}ä", "z".repeat(35));
+        assert_eq!(extract_file_id_from_key(&key), None);
+    }
+
+    #[test]
+    fn extract_file_id_garbage_returns_none() {
+        assert_eq!(extract_file_id_from_key("not-a-file-key"), None);
+        assert_eq!(extract_file_id_from_key(""), None);
+    }
+
+    // ── extract_upload_id / extract_file_url ───────────────────────────────
+
+    #[test]
+    fn extract_upload_id_top_level_and_nested() {
+        assert_eq!(
+            extract_upload_id(&serde_json::json!({"upload_id": "u1"})),
+            Some("u1".to_string())
+        );
+        assert_eq!(
+            extract_upload_id(&serde_json::json!({"data": {"upload_id": "u2"}})),
+            Some("u2".to_string())
+        );
+        assert_eq!(extract_upload_id(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn extract_file_url_top_level_key() {
+        let payload = serde_json::json!({"url": "https://h/f.docx"});
+        assert_eq!(extract_file_url(&payload), Some("https://h/f.docx".to_string()));
+    }
+
+    #[test]
+    fn extract_file_url_nested_data_file() {
+        let payload = serde_json::json!({"data": {"file": {"download_url": "https://h/n.docx"}}});
+        assert_eq!(extract_file_url(&payload), Some("https://h/n.docx".to_string()));
+    }
+
+    #[test]
+    fn extract_file_url_ignores_empty_and_missing() {
+        assert_eq!(extract_file_url(&serde_json::json!({"url": ""})), None);
+        assert_eq!(extract_file_url(&serde_json::json!({})), None);
+    }
+
+    // ── is_file_not_found_err ──────────────────────────────────────────────
+
+    #[test]
+    fn file_not_found_needs_both_markers() {
+        assert!(is_file_not_found_err("HTTP 404: File Not Found"));
+        assert!(is_file_not_found_err(
+            "onlyofficeCommit failed (404): {\"error\":\"file not found\"}"
+        ));
+        assert!(!is_file_not_found_err("HTTP 404: page missing"));
+        assert!(!is_file_not_found_err("file not found (HTTP 500)"));
+    }
+
+    // ── random_session_id ──────────────────────────────────────────────────
+
+    #[test]
+    fn random_session_id_is_32_hex_chars_and_unique() {
+        let a = random_session_id();
+        let b = random_session_id();
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
+    }
+
+    // ── sanitize_file_id / sanitize_filename ───────────────────────────────
+
+    #[test]
+    fn sanitize_file_id_strips_traversal_to_none() {
+        assert_eq!(sanitize_file_id("../.."), None);
+        assert_eq!(sanitize_file_id(""), None);
+    }
+
+    #[test]
+    fn sanitize_file_id_keeps_uuid_like_ids() {
+        assert_eq!(sanitize_file_id(UUID), Some(UUID.to_string()));
+        assert_eq!(sanitize_file_id("../etc"), Some("etc".to_string()));
+    }
+
+    #[test]
+    fn sanitize_filename_replaces_separators() {
+        assert_eq!(
+            sanitize_filename("a/b\\c:d.docx"),
+            Some("a_b_c_d.docx".to_string())
+        );
+        assert_eq!(sanitize_filename("nul\0byte"), Some("nul_byte".to_string()));
+    }
+
+    #[test]
+    fn sanitize_filename_rejects_blank_results() {
+        assert_eq!(sanitize_filename("   "), None);
+        assert_eq!(sanitize_filename(""), None);
+    }
 }

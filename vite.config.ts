@@ -34,12 +34,17 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          if (id.includes("node_modules")) {
-            if (id.includes("react") || id.includes("scheduler")) return "vendor-react";
-            if (id.includes("@tauri-apps")) return "vendor-tauri";
-            if (id.includes("zustand")) return "vendor-zustand";
-            if (id.includes("pdfjs-dist") || id.includes("mammoth")) return "vendor-docs";
-          }
+          // pnpm store paths encode peer deps (e.g. .pnpm/zustand@x_react@y/...),
+          // so match the package name after the LAST /node_modules/ segment.
+          const marker = "node_modules/";
+          const idx = id.lastIndexOf(marker);
+          if (idx === -1) return undefined;
+          const parts = id.slice(idx + marker.length).split("/");
+          const pkg = parts[0].startsWith("@") ? `${parts[0]}/${parts[1] ?? ""}` : parts[0];
+          if (pkg === "react" || pkg === "react-dom" || pkg === "scheduler") return "vendor-react";
+          if (pkg.startsWith("@tauri-apps/")) return "vendor-tauri";
+          if (pkg === "zustand") return "vendor-zustand";
+          if (pkg === "pdfjs-dist" || pkg === "mammoth") return "vendor-docs";
           return undefined;
         },
       },

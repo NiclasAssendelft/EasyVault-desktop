@@ -415,6 +415,33 @@ const sv: Record<keyof typeof en, string> = {
   "settings.update.checkNow": "Sök efter uppdateringar",
   "settings.update.busy": "Arbetar…",
 
+  // UpdateBanner
+  "update.availableTitle": "Uppdatering tillgänglig — v{{version}}",
+  "update.availableSub": "Installera direkt i appen, eller hämta installeraren manuellt.",
+  "update.downloadingTitle": "Laddar ner v{{version}}…",
+  "update.progress": "{{done}} av {{total}} ({{pct}} %)",
+  "update.starting": "Startar…",
+  "update.installingTitle": "Installerar…",
+  "update.installingSub": "Avsluta inte EasyVault.",
+  "update.readyTitle": "v{{version}} är installerad",
+  "update.readySub": "Starta om EasyVault för att börja använda den nya versionen.",
+  "update.failedTitle": "Automatisk uppdatering misslyckades",
+  "update.failedSub": "{{error}} Ladda ner installeraren manuellt i stället.",
+  "update.genericError": "Något gick fel.",
+  "update.installNow": "Installera nu",
+  "update.downloadInstaller": "Ladda ner installeraren",
+  "update.dismiss": "Stäng",
+
+  // Global search / shell
+  "search.placeholder": "Sök filer, e-post, arbetsytor…",
+  "search.ariaLabel": "Global sökning",
+  "search.noSubject": "(Inget ämne)",
+  "search.workspace": "Arbetsyta",
+  "common.loading": "Läser in…",
+  "errorBoundary.title": "Något gick fel",
+  "errorBoundary.tryAgain": "Försök igen",
+  "errorBoundary.reload": "Ladda om appen",
+
   // NewModal
   "new.titleFolder": "Ny mapp",
   "new.titleItem": "Nytt objekt",
@@ -654,8 +681,14 @@ const sv: Record<keyof typeof en, string> = {
   "workspaces.roleUpdated": "Roll uppdaterad till {{role}}",
   "workspaces.roleUpdateFailed": "Misslyckades att uppdatera roll: {{error}}",
   "workspaces.deleteFailed": "Misslyckades att ta bort arbetsyta: {{error}}",
+  "workspaces.saveFailed": "Misslyckades att spara arbetsytans inst\u00e4llningar: {{error}}",
   "workspaces.inviteLinkCopied": "Inbjudningsl\u00e4nk kopierad!",
   "workspaces.inviteLinkFailed": "Misslyckades att skapa inbjudningsl\u00e4nk: {{error}}",
+  "workspaces.chatSendFailed": "Misslyckades att skicka meddelandet: {{error}}",
+  "workspaces.pinFailed": "Misslyckades att f\u00e4sta meddelandet: {{error}}",
+  "workspaces.taskAddFailed": "Misslyckades att l\u00e4gga till uppgiften: {{error}}",
+  "workspaces.taskUpdateFailed": "Misslyckades att uppdatera uppgiften: {{error}}",
+  "workspaces.taskDeleteFailed": "Misslyckades att ta bort uppgiften: {{error}}",
   "workspaces.overviewTab": "\u00d6versikt",
   "workspaces.filesTab": "Filer",
   "workspaces.chatTab": "Chatt",
@@ -770,6 +803,11 @@ const sv: Record<keyof typeof en, string> = {
   "translate.copy": "Kopiera",
   "translate.copied": "Kopierat!",
   "translate.close": "Stäng",
+  "common.close": "Stäng",
+
+  // Status bar (sync health)
+  "status.syncOffline": "Synkronisering offline — försöker igen...",
+  "status.syncRestored": "Synkroniseringen fungerar igen",
 };
 
 export default sv;

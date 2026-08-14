@@ -415,6 +415,33 @@ const fi: Record<keyof typeof en, string> = {
   "settings.update.checkNow": "Tarkista päivitykset",
   "settings.update.busy": "Työstetään…",
 
+  // UpdateBanner
+  "update.availableTitle": "Päivitys saatavilla — v{{version}}",
+  "update.availableSub": "Asenna suoraan sovelluksessa tai lataa asennusohjelma itse.",
+  "update.downloadingTitle": "Ladataan versiota v{{version}}…",
+  "update.progress": "{{done}} / {{total}} ({{pct}} %)",
+  "update.starting": "Aloitetaan…",
+  "update.installingTitle": "Asennetaan…",
+  "update.installingSub": "Älä sulje EasyVaultia.",
+  "update.readyTitle": "v{{version}} on asennettu",
+  "update.readySub": "Käynnistä EasyVault uudelleen ottaaksesi uuden version käyttöön.",
+  "update.failedTitle": "Automaattinen päivitys ei onnistunut",
+  "update.failedSub": "{{error}} Lataa asennusohjelma manuaalisesti.",
+  "update.genericError": "Jotain meni pieleen.",
+  "update.installNow": "Asenna nyt",
+  "update.downloadInstaller": "Lataa asennusohjelma",
+  "update.dismiss": "Sulje",
+
+  // Global search / shell
+  "search.placeholder": "Hae tiedostoja, sähköposteja ja työtiloja…",
+  "search.ariaLabel": "Yleishaku",
+  "search.noSubject": "(Ei aihetta)",
+  "search.workspace": "Työtila",
+  "common.loading": "Ladataan…",
+  "errorBoundary.title": "Jotain meni pieleen",
+  "errorBoundary.tryAgain": "Yritä uudelleen",
+  "errorBoundary.reload": "Lataa sovellus uudelleen",
+
   // NewModal
   "new.titleFolder": "Uusi kansio",
   "new.titleItem": "Uusi kohde",
@@ -654,8 +681,14 @@ const fi: Record<keyof typeof en, string> = {
   "workspaces.roleUpdated": "Rooli p\u00e4ivitetty: {{role}}",
   "workspaces.roleUpdateFailed": "Roolin p\u00e4ivitys ep\u00e4onnistui: {{error}}",
   "workspaces.deleteFailed": "Ty\u00f6tilan poistaminen ep\u00e4onnistui: {{error}}",
+  "workspaces.saveFailed": "Ty\u00f6tilan asetusten tallennus ep\u00e4onnistui: {{error}}",
   "workspaces.inviteLinkCopied": "Kutsulinkki kopioitu!",
   "workspaces.inviteLinkFailed": "Kutsulinkin luonti ep\u00e4onnistui: {{error}}",
+  "workspaces.chatSendFailed": "Viestin l\u00e4hett\u00e4minen ep\u00e4onnistui: {{error}}",
+  "workspaces.pinFailed": "Viestin kiinnitt\u00e4minen ep\u00e4onnistui: {{error}}",
+  "workspaces.taskAddFailed": "Teht\u00e4v\u00e4n lis\u00e4\u00e4minen ep\u00e4onnistui: {{error}}",
+  "workspaces.taskUpdateFailed": "Teht\u00e4v\u00e4n p\u00e4ivitt\u00e4minen ep\u00e4onnistui: {{error}}",
+  "workspaces.taskDeleteFailed": "Teht\u00e4v\u00e4n poistaminen ep\u00e4onnistui: {{error}}",
   "workspaces.overviewTab": "Yleiskatsaus",
   "workspaces.filesTab": "Tiedostot",
   "workspaces.chatTab": "Keskustelu",
@@ -770,6 +803,11 @@ const fi: Record<keyof typeof en, string> = {
   "translate.copy": "Kopioi",
   "translate.copied": "Kopioitu!",
   "translate.close": "Sulje",
+  "common.close": "Sulje",
+
+  // Status bar (sync health)
+  "status.syncOffline": "Synkronointi katkennut — yritetään uudelleen...",
+  "status.syncRestored": "Synkronointi palautui",
 };
 
 export default fi;

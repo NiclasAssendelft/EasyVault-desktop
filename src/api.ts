@@ -1,4 +1,4 @@
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { fetch as tauriFetchRaw } from "@tauri-apps/plugin-http";
 import {
   SUPABASE_ANON_KEY,
   SUPABASE_FUNCTIONS_URL,
@@ -7,6 +7,49 @@ import {
 import { CHUNK_SIZE } from "./config";
 import type { ActiveEditSession, CheckoutPayload, ResolvedCheckout } from "./types";
 import { getAuthToken, getRefreshToken, getExtensionToken, saveLogin, getDeviceId } from "./storage";
+
+// ── Network timeouts ────────────────────────────────────────────────
+/** Default timeout for JSON calls (edge functions, entity CRUD, auth). */
+const API_TIMEOUT_MS = 30_000;
+/** One 5 MiB upload chunk (and server-side chunk assembly) on a slow link. */
+const UPLOAD_CHUNK_TIMEOUT_MS = 120_000;
+/** Whole-file downloads. */
+const DOWNLOAD_TIMEOUT_MS = 300_000;
+/** Long-running edge functions (mail/calendar sync, AI). */
+const SLOW_EDGE_TIMEOUT_MS = 180_000;
+const SLOW_EDGE_FUNCTIONS = new Set([
+  "syncGmail",
+  "syncOutlookEmails",
+  "syncOutlookCalendar",
+  "gatherRelated",
+  "suggestTags",
+  "translateText",
+]);
+
+/**
+ * AbortSignal that fires after `ms`. Hand-rolled instead of
+ * `AbortSignal.timeout()`, which is missing in older WebViews.
+ */
+function timeoutSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  setTimeout(
+    () => controller.abort(new Error(`Request timed out after ${Math.round(ms / 1000)}s`)),
+    ms
+  );
+  return controller.signal;
+}
+
+/** Tauri fetch with a default 30s timeout; override per call via `timeoutMs`. */
+function tauriFetch(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {}
+): Promise<Response> {
+  const { timeoutMs, signal, ...rest } = init;
+  return tauriFetchRaw(url, {
+    ...rest,
+    signal: signal ?? timeoutSignal(timeoutMs ?? API_TIMEOUT_MS),
+  });
+}
 
 // ── Entity name → Supabase table name mapping ──────────────────────
 const TABLE_MAP: Record<string, string> = {
@@ -44,6 +87,7 @@ const EDGE_FUNCTION_MAP: Record<string, string> = {
   onlyofficeCommit: "onlyoffice-commit",
   gatherRelated: "gather-related",
   suggestTags: "suggest-tags",
+  translateText: "translate-text",
   syncGmail: "sync-gmail",
   syncOutlookEmails: "sync-outlook-emails",
   syncOutlookCalendar: "sync-outlook-calendar",
@@ -189,6 +233,7 @@ async function refreshSupabaseToken(): Promise<string> {
     credentials: "omit",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
     body: JSON.stringify({ refresh_token: rt }),
+    signal: timeoutSignal(API_TIMEOUT_MS),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
   if (!res.ok || !data.access_token) {
@@ -273,6 +318,7 @@ export async function invokeEdgeFunction<T = unknown>(
     method: "POST",
     headers: supabaseHeaders(SUPABASE_ANON_KEY),
     body: JSON.stringify({ ...payload, token: userToken }),
+    timeoutMs: SLOW_EDGE_FUNCTIONS.has(name) ? SLOW_EDGE_TIMEOUT_MS : API_TIMEOUT_MS,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -499,6 +545,7 @@ export async function signup(email: string, password: string): Promise<string> {
       apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({ email, password }),
+    signal: timeoutSignal(API_TIMEOUT_MS),
   });
   const data = (await res.json().catch(() => ({}))) as {
     access_token?: string;
@@ -535,6 +582,7 @@ export async function login(email: string, password: string): Promise<string> {
       apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({ email, password }),
+    signal: timeoutSignal(API_TIMEOUT_MS),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; error_description?: string; error?: string; msg?: string };
   if (!res.ok || !data.access_token) {
@@ -574,7 +622,7 @@ export async function checkoutFile(fileId: string, requestToken: string): Promis
 }
 
 export async function downloadFile(downloadUrl: string): Promise<Uint8Array> {
-  const res = await tauriFetch(downloadUrl, { method: "GET" });
+  const res = await tauriFetch(downloadUrl, { method: "GET", timeoutMs: DOWNLOAD_TIMEOUT_MS });
   if (!res.ok) {
     throw new Error(`Download failed (${res.status})`);
   }
@@ -644,6 +692,7 @@ export async function uploadFileWithToken(
       method: "POST",
       headers: chunkHeaders,
       body: form,
+      timeoutMs: UPLOAD_CHUNK_TIMEOUT_MS,
     });
     const chunkData = await chunkRes.json().catch(() => ({}));
     if (!chunkRes.ok) {
@@ -668,6 +717,7 @@ export async function uploadFileWithToken(
     const completeRes = await tauriFetch(completeUrl, {
       method: "POST",
       headers: completeHeaders,
+      timeoutMs: UPLOAD_CHUNK_TIMEOUT_MS,
       body: JSON.stringify({
         token,
         upload_id: uploadId,

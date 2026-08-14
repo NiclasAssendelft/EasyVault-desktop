@@ -21,6 +21,7 @@ interface SyncState {
   addUnsupportedField: (entity: EntityName, field: string) => void;
   setSchemaFields: (entity: EntityName, fields: Set<string>) => void;
   setSchemaInfo: (loadedAt: string, version: string, functionCount: number) => void;
+  reset: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
@@ -57,20 +58,30 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   setRemotePollId: (id) => set({ remotePollId: id }),
   setEntityUpdatedAt: (entity, id, updatedAtIso) => {
     if (!id || !updatedAtIso) return;
-    const map = get().remoteUpdatedAtByEntity[entity];
-    if (map) map.set(id, updatedAtIso);
+    const maps = get().remoteUpdatedAtByEntity;
+    const prev = maps[entity];
+    if (!prev) return;
+    const nextMap = new Map(prev);
+    nextMap.set(id, updatedAtIso);
+    set({ remoteUpdatedAtByEntity: { ...maps, [entity]: nextMap } });
   },
   getEntityUpdatedAt: (entity, id) => {
     const map = get().remoteUpdatedAtByEntity[entity];
     return map?.get(id) || "";
   },
   removeEntityUpdatedAt: (entity, id) => {
-    const map = get().remoteUpdatedAtByEntity[entity];
-    if (map) map.delete(id);
+    const maps = get().remoteUpdatedAtByEntity;
+    const prev = maps[entity];
+    if (!prev || !prev.has(id)) return;
+    const nextMap = new Map(prev);
+    nextMap.delete(id);
+    set({ remoteUpdatedAtByEntity: { ...maps, [entity]: nextMap } });
   },
   clearEntityUpdatedAt: (entity) => {
-    const map = get().remoteUpdatedAtByEntity[entity];
-    if (map) map.clear();
+    const maps = get().remoteUpdatedAtByEntity;
+    const prev = maps[entity];
+    if (!prev || prev.size === 0) return;
+    set({ remoteUpdatedAtByEntity: { ...maps, [entity]: new Map<string, string>() } });
   },
   isFieldSupported: (entity, field) => {
     const { schemaFieldsByEntity, unsupportedFieldsByEntity } = get();
@@ -87,7 +98,13 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     return cleaned;
   },
   addUnsupportedField: (entity, field) => {
-    get().unsupportedFieldsByEntity[entity].add(field);
+    const byEntity = get().unsupportedFieldsByEntity;
+    if (byEntity[entity].has(field)) return;
+    const nextSet = new Set(byEntity[entity]);
+    nextSet.add(field);
+    const next = { ...byEntity };
+    next[entity] = nextSet;
+    set({ unsupportedFieldsByEntity: next });
   },
   setSchemaFields: (entity, fields) => {
     const next = { ...get().schemaFieldsByEntity };
@@ -96,5 +113,12 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   },
   setSchemaInfo: (loadedAt, version, functionCount) => {
     set({ schemaLoadedAt: loadedAt, schemaVersion: version, schemaFunctionCount: functionCount });
+  },
+  /** Drop per-user sync bookkeeping (delta cursor + updated-at maps). Used on logout. */
+  reset: () => {
+    const maps = get().remoteUpdatedAtByEntity;
+    const next: Record<string, Map<string, string>> = {};
+    for (const key of Object.keys(maps)) next[key] = new Map<string, string>();
+    set({ lastDeltaSyncIso: "", remoteUpdatedAtByEntity: next });
   },
 }));

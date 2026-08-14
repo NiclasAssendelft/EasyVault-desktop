@@ -14,6 +14,7 @@ interface QueueState {
   setWatchPollId: (id: number | null) => void;
   markSignature: (sig: string) => void;
   hasSignature: (sig: string) => boolean;
+  reset: () => void;
 }
 
 export const useQueueStore = create<QueueState>((set, get) => ({
@@ -28,9 +29,16 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   setIsRunning: (running) => set({ isRunning: running }),
   setWatchPollId: (id) => set({ watchPollId: id }),
   markSignature: (sig) => {
-    const sigs = get().uploadedSignatures;
-    sigs.add(sig);
-    saveUploadedWatchSignatures(sigs);
+    const next = new Set(get().uploadedSignatures);
+    next.add(sig);
+    set({ uploadedSignatures: next });
+    saveUploadedWatchSignatures(next);
   },
   hasSignature: (sig) => get().uploadedSignatures.has(sig),
+  /** Clear queue items + uploaded-signature dedupe (in memory + localStorage). Used on logout. */
+  reset: () => {
+    const empty = new Set<string>();
+    set({ items: [], uploadedSignatures: empty });
+    saveUploadedWatchSignatures(empty);
+  },
 }));

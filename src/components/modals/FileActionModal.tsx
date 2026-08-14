@@ -90,10 +90,10 @@ export default function FileActionModal() {
   return (
     <div className="modal">
       <div className="modal-backdrop" onClick={close} />
-      <div className="modal-panel file-action-panel">
+      <div className="modal-panel file-action-panel" role="dialog" aria-modal="true" aria-label={item.title}>
         <div className="modal-head">
           <h3>{item.title}</h3>
-          <button type="button" className="ghost" onClick={close}>&#x2715;</button>
+          <button type="button" className="ghost" onClick={close} aria-label={t("common.close")}>&#x2715;</button>
         </div>
         {status && <p className="files-scope-label">{status}</p>}
         <div className="file-action-list">

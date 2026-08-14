@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { login as apiLogin, signup as apiSignup, invokeEdgeFunction } from "../api";
 import { getAuthToken, getSavedEmail, saveLogin, clearLogin, getExtensionToken, saveSettings } from "../storage";
+import { useFilesStore } from "./filesStore";
+import { useRemoteDataStore } from "./remoteDataStore";
+import { useQueueStore } from "./queueStore";
+import { useSyncStore } from "./syncStore";
 
 async function ensureExtensionToken(accessToken: string): Promise<void> {
   if (getExtensionToken()) return;
@@ -49,6 +53,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     clearLogin();
+    // Drop the long-lived extension token so a next login on this machine
+    // can't upload as the previous user (ensureExtensionToken recreates it).
+    saveSettings("", "");
+    // Clear the previous user's cached data (in memory + localStorage).
+    // Locale, device id and saved email are intentionally kept.
+    useFilesStore.getState().reset();
+    useRemoteDataStore.getState().reset();
+    useQueueStore.getState().reset();
+    useSyncStore.getState().reset();
     set({ isLoggedIn: false, email: "", accessibleSpaceIds: [], personalSpaceId: "" });
   },
   setAccessScope: (spaceIds, personalId) => {
