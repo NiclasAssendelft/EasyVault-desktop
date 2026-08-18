@@ -17,6 +17,7 @@ export const STORAGE_KEYS = {
   emailSyncCount: "easyvault_email_sync_count",
   refreshToken: "easyvault_refresh_token",
   deviceId: "easyvault_device_id",
+  pendingInvite: "easyvault_pending_invite",
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";

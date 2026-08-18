@@ -606,6 +606,12 @@ const en = {
   "image.exportFailed": "failed to export edited image",
   "image.saved": "image edited and version saved",
 
+  // Invite flow
+  "invite.pendingBanner": "Sign in to join “{{name}}”",
+  "invite.joined": "You've joined “{{name}}”",
+  "invite.alreadyMember": "You're already a member of “{{name}}”",
+  "invite.joinFailed": "Couldn't join: {{error}}",
+
   // Workspaces (sub-panels)
   "workspaces.recentActivity": "Recent Activity",
   "workspaces.noActivity": "No activity yet",
@@ -653,7 +659,18 @@ const en = {
   "workspaces.inviteMember": "Invite Member",
   "workspaces.roleViewer": "Viewer",
   "workspaces.roleEditor": "Editor",
+  "workspaces.roleOwner": "Owner",
+  "workspaces.roleMember": "Member",
   "workspaces.copyInviteLink": "Copy Invite Link",
+  "workspaces.share": "Share",
+  "workspaces.shareTitle": "Share “{{name}}”",
+  "workspaces.shareDesc": "Anyone with this link joins as a member. Link expires in 7 days.",
+  "workspaces.shareCopy": "Copy link",
+  "workspaces.shareCopied": "Copied!",
+  "workspaces.shareActive": "Active links",
+  "workspaces.shareNoLinks": "No active links",
+  "workspaces.shareRevoke": "Revoke",
+  "workspaces.shareExpires": "Expires {{date}}",
   "workspaces.owner": "Owner",
   "workspaces.editor": "Editor",
   "workspaces.viewer": "Viewer",

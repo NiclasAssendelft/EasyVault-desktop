@@ -1218,7 +1218,16 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     start_onlyoffice_callback_relay();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Must be the FIRST registered plugin. With the "deep-link" feature it
+    // forwards easyvault:// URLs from a second launch (how Windows/Linux
+    // deliver scheme clicks) to this instance's deep-link handler instead
+    // of opening a duplicate app window.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}));
+    }
+    builder
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())

@@ -11,6 +11,7 @@ import {
   refreshDropzoneFromRemote,
 } from "../services/deltaSyncService";
 import { setupOnlyofficeLocalRelay, launchOnlyofficeEditor } from "../services/onlyofficeService";
+import { redeemPendingInvite } from "../services/inviteService";
 import { useUpdateStore } from "../stores/updateStore";
 import { startWatchPolling, stopWatchPolling, scanWatchFolder, processQueue } from "../services/queueService";
 import { invokeEdgeFunction } from "../api";
@@ -248,6 +249,13 @@ export default function WorkspaceLayout() {
       void useUpdateStore.getState().checkForUpdate(true);
     }, 6 * 60 * 60 * 1000);
     return () => window.clearInterval(id);
+  }, []);
+
+  // Redeem any invite token stored before login. The deep-link wiring itself
+  // lives in App.tsx (mounted regardless of auth state); redeeming needs auth,
+  // so it runs here on the logged-in shell's mount.
+  useEffect(() => {
+    void redeemPendingInvite();
   }, []);
 
   // Start/stop watch folder polling

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
+import { getPendingInvite, PENDING_INVITE_EVENT } from "../services/inviteService";
 import { useT, t } from "../i18n";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config";
 import loginBg from "../assets/login-bg.jpg";
@@ -18,7 +19,18 @@ export default function LoginScreen() {
   const [capsLockOn, setCapsLockOn] = useState(false);
   const login = useAuthStore((s) => s.login);
   const signup = useAuthStore((s) => s.signup);
+  // Deep-link invite clicked before sign-in — the space name is unknown
+  // pre-auth, so the banner renders with an ellipsis placeholder. Re-read on
+  // the pending-invite event so a link clicked while this screen is already
+  // mounted still surfaces the banner.
+  const [pendingInvite, setPendingInvite] = useState(() => getPendingInvite());
   const tr = useT();
+
+  useEffect(() => {
+    const handler = () => setPendingInvite(getPendingInvite());
+    window.addEventListener(PENDING_INVITE_EVENT, handler);
+    return () => window.removeEventListener(PENDING_INVITE_EVENT, handler);
+  }, []);
 
   const clearMessage = () => { setMessage(null); setHasError(false); };
 
@@ -137,6 +149,12 @@ export default function LoginScreen() {
           <div className="login-card-title">
             {mode === "login" ? tr("login.heading") : tr("signup.heading")}
           </div>
+
+          {pendingInvite && (
+            <div className="login-message info" role="status" aria-live="polite">
+              {tr("invite.pendingBanner", { name: "…" })}
+            </div>
+          )}
 
           <div className="auth-tabs">
             <button

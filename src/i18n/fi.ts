@@ -606,6 +606,12 @@ const fi: Record<keyof typeof en, string> = {
   "image.exportFailed": "muokatun kuvan vienti epäonnistui",
   "image.saved": "kuva muokattu ja versio tallennettu",
 
+  // Invite flow
+  "invite.pendingBanner": "Kirjaudu sisään liittyäksesi tilaan “{{name}}”",
+  "invite.joined": "Liityit tilaan “{{name}}”",
+  "invite.alreadyMember": "Olet jo tilan “{{name}}” jäsen",
+  "invite.joinFailed": "Liittyminen epäonnistui: {{error}}",
+
   // Workspaces (sub-panels)
   "workspaces.recentActivity": "Viimeaikainen toiminta",
   "workspaces.noActivity": "Ei toimintaa viel\u00e4",
@@ -653,7 +659,18 @@ const fi: Record<keyof typeof en, string> = {
   "workspaces.inviteMember": "Kutsu j\u00e4sen",
   "workspaces.roleViewer": "Katselija",
   "workspaces.roleEditor": "Muokkaaja",
+  "workspaces.roleOwner": "Omistaja",
+  "workspaces.roleMember": "J\u00e4sen",
   "workspaces.copyInviteLink": "Kopioi kutsulinkki",
+  "workspaces.share": "Jaa",
+  "workspaces.shareTitle": "Jaa \u201c{{name}}\u201d",
+  "workspaces.shareDesc": "Kuka tahansa, jolla on linkki, liittyy j\u00e4seneksi. Linkki vanhenee 7 p\u00e4iv\u00e4ss\u00e4.",
+  "workspaces.shareCopy": "Kopioi linkki",
+  "workspaces.shareCopied": "Kopioitu!",
+  "workspaces.shareActive": "Aktiiviset linkit",
+  "workspaces.shareNoLinks": "Ei aktiivisia linkkej\u00e4",
+  "workspaces.shareRevoke": "Mit\u00e4t\u00f6i",
+  "workspaces.shareExpires": "Vanhenee {{date}}",
   "workspaces.owner": "Omistaja",
   "workspaces.editor": "Muokkaaja",
   "workspaces.viewer": "Katselija",

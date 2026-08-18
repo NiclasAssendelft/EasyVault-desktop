@@ -7,7 +7,7 @@ import { safeEntityCreate } from "../../../services/entityService";
 import { entityCreate, entityDelete, invokeEdgeFunction } from "../../../api";
 import { refreshSharedFromRemote, refreshAccessScope } from "../../../services/deltaSyncService";
 import { useT, t } from "../../../i18n";
-import { avatarColor, initials, currentUserEmail } from "./workspaceHelpers";
+import { avatarColor, initials, currentUserEmail, extractInviteToken } from "./workspaceHelpers";
 import type { SpaceMember } from "./workspaceTypes";
 import WorkspaceDetail from "./WorkspaceDetail";
 
@@ -106,10 +106,12 @@ export default function WorkspacesTab() {
   }, [setStatus]);
 
   const handleJoinSpace = useCallback(async () => {
-    if (!joinCode.trim()) return;
+    // Accepts a bare invite code or a full pasted invite URL (…/invite/<token>).
+    const token = extractInviteToken(joinCode);
+    if (!token) return;
     setJoining(true);
     try {
-      await invokeEdgeFunction("spaceInviteLink", { action: "join", token: joinCode.trim() });
+      await invokeEdgeFunction("spaceInviteLink", { action: "join", token });
       setStatus(t("workspaces.joined"));
       setJoinCode("");
       await refreshAccessScope();

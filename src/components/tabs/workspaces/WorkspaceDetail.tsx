@@ -7,13 +7,29 @@ import { invokeEdgeFunction } from "../../../api";
 import { refreshSharedFromRemote } from "../../../services/deltaSyncService";
 import { uploadSelectedFilesToSpace } from "../../../services/fileOps";
 import { useT, t } from "../../../i18n";
+import { SUPABASE_FUNCTIONS_URL } from "../../../config";
+import { useEscapeClose } from "../../../hooks/useEscapeClose";
 import type { ActionTarget } from "../../../services/helpers";
-import { avatarColor, initials, formatChatTime, formatActivityTime, currentUserEmail } from "./workspaceHelpers";
-import type { SpaceMember, SpaceMessage, SpaceTask, ActivityEntry, SectionId } from "./workspaceTypes";
+import { avatarColor, initials, formatChatTime, formatActivityTime, currentUserEmail, copyTextToClipboard, formatExpiryDate } from "./workspaceHelpers";
+import type { SpaceMember, SpaceMessage, SpaceTask, ActivityEntry, SectionId, SpaceInviteLink } from "./workspaceTypes";
 
 interface WorkspaceDetailProps {
   space: Record<string, unknown>;
   onBack: () => void;
+}
+
+/** The invite link currently shown in the share dialog's main URL box. */
+type CurrentShareLink = { id: string; url: string; expiresAt: string | null };
+
+function inviteLinkUrl(link: SpaceInviteLink): string {
+  if (link.url) return link.url;
+  return link.token ? `${SUPABASE_FUNCTIONS_URL}/invite/${link.token}` : "";
+}
+
+/** Compact row label for the Active-links list: token prefix, or created date as fallback. */
+function shortInviteLabel(link: SpaceInviteLink): string {
+  if (link.token) return `…/invite/${link.token.slice(0, 8)}…`;
+  return link.created_at ? formatExpiryDate(link.created_at) : "…";
 }
 
 export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps) {
@@ -40,7 +56,6 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const chatInputRef = useRef<HTMLInputElement>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
   const [inviting, setInviting] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -52,9 +67,14 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [showCompleted, setShowCompleted] = useState(false);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
-  const [inviteLinkRole, setInviteLinkRole] = useState<"editor" | "viewer">("viewer");
-  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
-  const [inviteLinkToken, setInviteLinkToken] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareLink, setShareLink] = useState<CurrentShareLink | null>(null);
+  const [shareRevoked, setShareRevoked] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareLinks, setShareLinks] = useState<SpaceInviteLink[]>([]);
+  const [shareListLoading, setShareListLoading] = useState(false);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [confirmRemoveEmail, setConfirmRemoveEmail] = useState<string | null>(null);
 
   // ── Computed ──
@@ -219,15 +239,16 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      await invokeEdgeFunction("spaceInvite", { space_id: activeSpaceId, email: inviteEmail.trim(), role: inviteRole });
-      setStatus(t("workspaces.invited", { email: inviteEmail.trim(), role: inviteRole }));
+      // No role in the payload: everyone joins as a member (backend defaults the role).
+      await invokeEdgeFunction("spaceInvite", { space_id: activeSpaceId, email: inviteEmail.trim() });
+      setStatus(t("workspaces.invited", { email: inviteEmail.trim(), role: t("workspaces.roleMember") }));
       setInviteOpen(false);
       setInviteEmail("");
       await refreshSharedFromRemote();
     } catch (err) {
       setStatus(t("workspaces.inviteFailed", { error: String(err) }));
     } finally { setInviting(false); }
-  }, [inviteEmail, inviteRole, activeSpaceId, setStatus]);
+  }, [inviteEmail, activeSpaceId, setStatus]);
 
   const handleRemoveMember = useCallback(async (email: string) => {
     try {
@@ -236,14 +257,6 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       setConfirmRemoveEmail(null);
       await refreshSharedFromRemote();
     } catch (err) { setStatus(t("workspaces.removeFailed", { error: String(err) })); }
-  }, [activeSpaceId, setStatus]);
-
-  const handleUpdateRole = useCallback(async (email: string, newRole: string) => {
-    try {
-      await invokeEdgeFunction("spaceUpdateRole", { space_id: activeSpaceId, email, role: newRole });
-      setStatus(t("workspaces.roleUpdated", { role: newRole }));
-      await refreshSharedFromRemote();
-    } catch (err) { setStatus(t("workspaces.roleUpdateFailed", { error: String(err) })); }
   }, [activeSpaceId, setStatus]);
 
   const handleSaveSettings = useCallback(async () => {
@@ -321,35 +334,74 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     } catch (err) { setStatus(t("workspaces.taskDeleteFailed", { error: String(err) })); }
   }, [activeSpaceId, fetchTasks, setStatus]);
 
-  const handleCopyInviteLink = useCallback(async () => {
+  const closeShare = useCallback(() => setShareOpen(false), []);
+  useEscapeClose(shareOpen, closeShare);
+
+  const fetchShareLinks = useCallback(async () => {
+    setShareListLoading(true);
     try {
-      const res = await invokeEdgeFunction<{ token?: string }>("spaceInviteLink", { space_id: activeSpaceId, action: "create", role: inviteLinkRole });
-      if (res.token) {
-        setInviteLinkToken(res.token);
-        // Try clipboard; textarea fallback with explicit focus for Tauri WebView
-        let copied = false;
-        try {
-          await navigator.clipboard.writeText(res.token);
-          copied = true;
-        } catch {
-          try {
-            const el = document.createElement("textarea");
-            el.value = res.token;
-            el.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px";
-            document.body.appendChild(el);
-            el.focus();
-            el.select();
-            copied = document.execCommand("copy");
-            document.body.removeChild(el);
-          } catch { /* ignore */ }
-        }
-        if (copied) {
-          setInviteLinkCopied(true);
-          setTimeout(() => setInviteLinkCopied(false), 2000);
-        }
+      const res = await invokeEdgeFunction<{ success?: boolean; links?: SpaceInviteLink[] }>(
+        "spaceInviteLink",
+        { space_id: activeSpaceId, action: "list" },
+      );
+      setShareLinks(res.links || []);
+    } catch { /* list is non-critical; keep current state */ }
+    finally { setShareListLoading(false); }
+  }, [activeSpaceId]);
+
+  const handleOpenShare = useCallback(async () => {
+    setShareOpen(true);
+    setShareCopied(false);
+    setShareRevoked(false);
+    setShareLink(null);
+    setShareLinks([]);
+    setConfirmRevokeId(null);
+    setShareLoading(true);
+    try {
+      // No role / expiry in the payload: backend defaults to Member with a 7-day expiry.
+      const res = await invokeEdgeFunction<{ success?: boolean; link?: SpaceInviteLink }>(
+        "spaceInviteLink",
+        { space_id: activeSpaceId, action: "create" },
+      );
+      const link = res.link;
+      if (!link?.token) throw new Error("Invite link response contained no token");
+      const url = inviteLinkUrl(link);
+      setShareLink({ id: asString(link.id), url, expiresAt: link.expires_at || null });
+      // Fetch after create so the fresh link also appears in the Active-links list.
+      void fetchShareLinks();
+      const copied = await copyTextToClipboard(url);
+      if (copied) {
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
       }
-    } catch (err) { setStatus(t("workspaces.inviteLinkFailed", { error: String(err) })); }
-  }, [activeSpaceId, inviteLinkRole, setStatus]);
+    } catch (err) {
+      setShareOpen(false);
+      setStatus(t("workspaces.inviteLinkFailed", { error: String(err) }));
+    } finally {
+      setShareLoading(false);
+    }
+  }, [activeSpaceId, fetchShareLinks, setStatus]);
+
+  const handleCopyShareUrl = useCallback(async () => {
+    if (!shareLink || shareRevoked) return;
+    const copied = await copyTextToClipboard(shareLink.url);
+    if (copied) {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
+  }, [shareLink, shareRevoked]);
+
+  const handleRevokeLink = useCallback(async (linkId: string) => {
+    try {
+      await invokeEdgeFunction("spaceInviteLink", { space_id: activeSpaceId, action: "revoke", link_id: linkId });
+      setConfirmRevokeId(null);
+      setShareLinks((prev) => prev.filter((l) => l.id !== linkId));
+      // Revoking the link shown in the main URL box disables its Copy affordance.
+      if (shareLink?.id === linkId) setShareRevoked(true);
+    } catch (err) {
+      setStatus(t("workspaces.removeFailed", { error: String(err) }));
+    }
+  }, [activeSpaceId, shareLink, setStatus]);
 
   const handleChatInputChange = useCallback((val: string) => {
     setChatInput(val);
@@ -387,7 +439,12 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       <button type="button" className="space-detail-back" onClick={onBack}>
         &#x2190; {tr("workspaces.backToSpaces")}
       </button>
-      <h2 className="space-detail-name">{spaceName}</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <h2 className="space-detail-name">{spaceName}</h2>
+        {isOwner && (
+          <button type="button" onClick={handleOpenShare}>{tr("workspaces.share")}</button>
+        )}
+      </div>
       {spaceDesc && <p className="space-detail-desc">{spaceDesc}</p>}
 
       <div className="space-section-tabs">
@@ -475,15 +532,9 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
         <WorkspaceMembersPanel
           allMembers={allMembers}
           isOwner={isOwner}
-          inviteLinkRole={inviteLinkRole}
-          setInviteLinkRole={setInviteLinkRole}
           confirmRemoveEmail={confirmRemoveEmail}
           setConfirmRemoveEmail={setConfirmRemoveEmail}
-          handleUpdateRole={handleUpdateRole}
           handleRemoveMember={handleRemoveMember}
-          handleCopyInviteLink={handleCopyInviteLink}
-          inviteLinkCopied={inviteLinkCopied}
-          inviteLinkToken={inviteLinkToken}
           setInviteOpen={setInviteOpen}
         />
       )}
@@ -509,6 +560,81 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
         />
       )}
 
+      {/* Share dialog (owner-only invite link) */}
+      {shareOpen && (
+        <div className="modal">
+          <div className="modal-backdrop" onClick={closeShare} />
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="share-space-title">
+            <div className="modal-head">
+              <h3 id="share-space-title">{tr("workspaces.shareTitle", { name: spaceName })}</h3>
+              <button type="button" onClick={closeShare}>&times;</button>
+            </div>
+            <div className="form" style={{ padding: "0 16px 16px" }}>
+              <p className="share-dialog-desc">{tr("workspaces.shareDesc")}</p>
+              {shareLoading && <p className="share-dialog-desc" aria-busy="true">&hellip;</p>}
+              {!shareLoading && shareLink && (
+                <>
+                  <div className="invite-link-display">
+                    <input
+                      type="text"
+                      readOnly
+                      disabled={shareRevoked}
+                      value={shareLink.url}
+                      onFocus={(e) => e.target.select()}
+                      className="invite-link-input"
+                      aria-label={tr("workspaces.shareTitle", { name: spaceName })}
+                    />
+                  </div>
+                  {shareLink.expiresAt && !shareRevoked && (
+                    <p className="share-dialog-expires">{tr("workspaces.shareExpires", { date: formatExpiryDate(shareLink.expiresAt) })}</p>
+                  )}
+                  <div className="share-links-section">
+                    <h4 className="share-links-title">{tr("workspaces.shareActive")}</h4>
+                    {shareListLoading && <p className="share-dialog-desc" aria-busy="true">&hellip;</p>}
+                    {!shareListLoading && shareLinks.length === 0 && (
+                      <p className="share-dialog-desc">{tr("workspaces.shareNoLinks")}</p>
+                    )}
+                    {!shareListLoading && shareLinks.map((link) => {
+                      const linkId = asString(link.id);
+                      const label = shortInviteLabel(link);
+                      return (
+                        <div key={linkId || label} className="share-link-row">
+                          <span className="share-link-url" title={inviteLinkUrl(link)}>{label}</span>
+                          {link.expires_at && (
+                            <span className="share-link-expires">{tr("workspaces.shareExpires", { date: formatExpiryDate(link.expires_at) })}</span>
+                          )}
+                          {confirmRevokeId === linkId ? (
+                            <div className="confirm-inline">
+                              <button type="button" className="confirm-yes" onClick={() => handleRevokeLink(linkId)}>{tr("workspaces.shareRevoke")}</button>
+                              <button type="button" className="confirm-no" onClick={() => setConfirmRevokeId(null)}>{tr("workspaces.cancel")}</button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="space-member-remove"
+                              onClick={() => setConfirmRevokeId(linkId)}
+                              aria-label={`${tr("workspaces.shareRevoke")} ${label}`}
+                            >
+                              {tr("workspaces.shareRevoke")}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="actions-row">
+                    <button type="button" className="ghost" onClick={closeShare}>{tr("workspaces.cancel")}</button>
+                    <button type="button" onClick={handleCopyShareUrl} className={shareCopied ? "copied" : ""} disabled={shareRevoked}>
+                      {shareCopied ? tr("workspaces.shareCopied") : tr("workspaces.shareCopy")}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Invite modal (shared across panels) */}
       {inviteOpen && (
         <div className="modal">
@@ -521,11 +647,6 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
             <div className="form" style={{ padding: "0 16px 16px" }}>
               <label>{tr("email.from")}</label>
               <input type="email" placeholder={tr("workspaces.emailPlaceholder")} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} autoFocus />
-              <label>{tr("workspaces.roleLabel")}</label>
-              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "editor" | "viewer")}>
-                <option value="editor">{tr("workspaces.roleEditor")}</option>
-                <option value="viewer">{tr("workspaces.roleViewer")}</option>
-              </select>
               <div className="actions-row">
                 <button type="button" className="ghost" onClick={() => setInviteOpen(false)}>{tr("workspaces.cancel")}</button>
                 <button type="button" onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
@@ -843,18 +964,12 @@ function WorkspaceTasksPanel({ canEdit, tasksLoading, activeTasks, completedTask
   );
 }
 
-function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteLinkRole, confirmRemoveEmail, setConfirmRemoveEmail, handleUpdateRole, handleRemoveMember, handleCopyInviteLink, inviteLinkCopied, inviteLinkToken, setInviteOpen }: {
+function WorkspaceMembersPanel({ allMembers, isOwner, confirmRemoveEmail, setConfirmRemoveEmail, handleRemoveMember, setInviteOpen }: {
   allMembers: { email: string; role: string }[];
   isOwner: boolean;
-  inviteLinkRole: "editor" | "viewer";
-  setInviteLinkRole: (v: "editor" | "viewer") => void;
   confirmRemoveEmail: string | null;
   setConfirmRemoveEmail: (v: string | null) => void;
-  handleUpdateRole: (email: string, role: string) => void;
   handleRemoveMember: (email: string) => void;
-  handleCopyInviteLink: () => void;
-  inviteLinkCopied: boolean;
-  inviteLinkToken: string | null;
   setInviteOpen: (v: boolean) => void;
 }) {
   const tr = useT();
@@ -863,27 +978,15 @@ function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteL
       {isOwner && (
         <div className="space-members-toolbar">
           <button type="button" onClick={() => setInviteOpen(true)}>{tr("workspaces.inviteMember")}</button>
-          <div className="space-invite-link-row">
-            <select value={inviteLinkRole} onChange={(e) => setInviteLinkRole(e.target.value as "editor" | "viewer")}>
-              <option value="viewer">{tr("workspaces.roleViewer")}</option>
-              <option value="editor">{tr("workspaces.roleEditor")}</option>
-            </select>
-            <button type="button" onClick={handleCopyInviteLink} className={inviteLinkCopied ? "copied" : ""}>
-              {inviteLinkCopied ? "✓ Copied!" : tr("workspaces.copyInviteLink")}
-            </button>
-          </div>
-          {inviteLinkToken && (
-            <div className="invite-link-display">
-              <input type="text" readOnly value={inviteLinkToken} onFocus={(e) => e.target.select()} className="invite-link-input" />
-            </div>
-          )}
         </div>
       )}
       <div className="space-member-list">
         {allMembers.map((m) => {
           const display = toDisplayName(m.email);
-          const roleKey = m.role === "owner" ? "workspaces.owner" : m.role === "editor" ? "workspaces.editor" : "workspaces.viewer";
-          const roleClass = `role-${m.role}`;
+          const isOwnerRole = m.role === "owner";
+          // Two display roles only: Owner + Member ("editor" and legacy "viewer" both render as Member).
+          const roleKey = isOwnerRole ? "workspaces.roleOwner" : "workspaces.roleMember";
+          const roleClass = isOwnerRole ? "role-owner" : "role-editor";
           return (
             <div key={m.email} className="space-member-row">
               <div className="space-avatar" style={{ background: avatarColor(display), marginLeft: 0 }}>{initials(display)}</div>
@@ -891,14 +994,7 @@ function WorkspaceMembersPanel({ allMembers, isOwner, inviteLinkRole, setInviteL
                 <p className="space-member-email">{display}</p>
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>{m.email}</p>
               </div>
-              {isOwner && m.role !== "owner" ? (
-                <select className={`space-member-role-select ${roleClass}`} value={m.role} onChange={(e) => handleUpdateRole(m.email, e.target.value)}>
-                  <option value="editor">{tr("workspaces.editor")}</option>
-                  <option value="viewer">{tr("workspaces.viewer")}</option>
-                </select>
-              ) : (
-                <span className={`space-member-role ${roleClass}`}>{tr(roleKey)}</span>
-              )}
+              <span className={`space-member-role ${roleClass}`}>{tr(roleKey)}</span>
               {isOwner && m.role !== "owner" && (
                 confirmRemoveEmail === m.email ? (
                   <div className="confirm-inline">

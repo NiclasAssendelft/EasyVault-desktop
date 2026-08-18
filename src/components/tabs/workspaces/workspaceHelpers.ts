@@ -40,3 +40,46 @@ export function formatActivityTime(iso: string): string {
 export function currentUserEmail(): string {
   return getSavedEmail().trim().toLowerCase();
 }
+
+/**
+ * Accepts either a bare invite code or a full invite URL
+ * (e.g. `https://…/functions/v1/invite/<token>` or `easyvault://invite/<token>`)
+ * and returns the 48-hex token. Falls back to the trimmed input so plain
+ * pasted codes keep working unchanged.
+ */
+export function extractInviteToken(input: string): string {
+  const trimmed = input.trim();
+  const match = trimmed.match(/\/invite\/([0-9a-f]{48})/i);
+  if (match) return match[1].toLowerCase();
+  return trimmed;
+}
+
+/** Copy text via the async clipboard API, with a textarea fallback for the Tauri WebView. */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px";
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(el);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** Locale-aware date for invite-link expiry display. */
+export function formatExpiryDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}

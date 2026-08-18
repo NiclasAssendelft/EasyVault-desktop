@@ -606,6 +606,12 @@ const sv: Record<keyof typeof en, string> = {
   "image.exportFailed": "misslyckades att exportera redigerad bild",
   "image.saved": "bild redigerad och version sparad",
 
+  // Invite flow
+  "invite.pendingBanner": "Logga in för att gå med i “{{name}}”",
+  "invite.joined": "Du har gått med i “{{name}}”",
+  "invite.alreadyMember": "Du är redan medlem i “{{name}}”",
+  "invite.joinFailed": "Kunde inte gå med: {{error}}",
+
   // Workspaces (sub-panels)
   "workspaces.recentActivity": "Senaste aktivitet",
   "workspaces.noActivity": "Ingen aktivitet \u00e4nnu",
@@ -653,7 +659,18 @@ const sv: Record<keyof typeof en, string> = {
   "workspaces.inviteMember": "Bjud in medlem",
   "workspaces.roleViewer": "L\u00e4sare",
   "workspaces.roleEditor": "Redakt\u00f6r",
+  "workspaces.roleOwner": "\u00c4gare",
+  "workspaces.roleMember": "Medlem",
   "workspaces.copyInviteLink": "Kopiera inbjudningsl\u00e4nk",
+  "workspaces.share": "Dela",
+  "workspaces.shareTitle": "Dela \u201c{{name}}\u201d",
+  "workspaces.shareDesc": "Alla som har l\u00e4nken g\u00e5r med som medlem. L\u00e4nken g\u00e5r ut om 7 dagar.",
+  "workspaces.shareCopy": "Kopiera l\u00e4nk",
+  "workspaces.shareCopied": "Kopierad!",
+  "workspaces.shareActive": "Aktiva l\u00e4nkar",
+  "workspaces.shareNoLinks": "Inga aktiva l\u00e4nkar",
+  "workspaces.shareRevoke": "\u00c5terkalla",
+  "workspaces.shareExpires": "G\u00e5r ut {{date}}",
   "workspaces.owner": "\u00c4gare",
   "workspaces.editor": "Redakt\u00f6r",
   "workspaces.viewer": "L\u00e4sare",

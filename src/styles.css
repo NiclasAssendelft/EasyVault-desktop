@@ -4779,3 +4779,52 @@ button.ghost.active {
   background: rgba(108, 71, 255, 0.2);
   color: var(--accent, #6c5ce7);
 }
+
+/* ── Share dialog (workspace invite link) ── */
+.share-dialog-desc {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.share-dialog-expires {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.share-links-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.share-links-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.share-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.share-link-url {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-link-expires {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.invite-link-input:disabled {
+  opacity: 0.45;
+  text-decoration: line-through;
+}

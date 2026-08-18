@@ -16,6 +16,18 @@ export type SpaceMember = {
   role?: string;
 };
 
+/** Row returned by the `space-invite-link` edge function (`res.link` on create, `res.links[]` on list). */
+export type SpaceInviteLink = {
+  id?: string;
+  token?: string;
+  url?: string;
+  role?: string;
+  expires_at?: string | null;
+  max_uses?: number;
+  use_count?: number;
+  created_at?: string;
+};
+
 export type SpaceTask = {
   id: string;
   space_id: string;
