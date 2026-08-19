@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import type { CSSProperties } from "react";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useFilesStore } from "../../stores/filesStore";
@@ -9,6 +10,17 @@ import { invokeEdgeFunction, entityFilter } from "../../api";
 import { safeEntityCreate } from "../../services/entityService";
 import { getPreferredUploadToken, getAuthToken } from "../../storage";
 import { useT, t } from "../../i18n";
+import { IconFileText, IconMail, IconCalendar, IconSparkles, IconChevronRight } from "../icons";
+
+/** Aligns an inline SVG icon with adjacent text (badges, buttons). */
+const INLINE_ICON: CSSProperties = { display: "inline-flex", verticalAlign: "-3px" };
+
+/** Icon for a gathered pack item by its type (vault file / email / calendar). */
+function PackItemTypeIcon({ type }: { type: string }) {
+  if (type === "email") return <IconMail size={15} />;
+  if (type === "calendar") return <IconCalendar size={15} />;
+  return <IconFileText size={15} />;
+}
 
 function RowMenu({ onAction }: { onAction: (action: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -245,9 +257,9 @@ export default function VaultTab() {
         <div className="gather-result">
           <div className="gather-result-header">
             <span className="gather-result-counts">
-              {pendingResult.vaultCount > 0 && <span className="gather-badge">📄 {tr("vault.files", { count: pendingResult.vaultCount })}</span>}
-              {pendingResult.emailCount > 0 && <span className="gather-badge">✉ {tr("vault.emails", { count: pendingResult.emailCount })}</span>}
-              {pendingResult.eventCount > 0 && <span className="gather-badge">📅 {tr("vault.events", { count: pendingResult.eventCount })}</span>}
+              {pendingResult.vaultCount > 0 && <span className="gather-badge"><span style={INLINE_ICON}><IconFileText size={14} /></span> {tr("vault.files", { count: pendingResult.vaultCount })}</span>}
+              {pendingResult.emailCount > 0 && <span className="gather-badge"><span style={INLINE_ICON}><IconMail size={14} /></span> {tr("vault.emails", { count: pendingResult.emailCount })}</span>}
+              {pendingResult.eventCount > 0 && <span className="gather-badge"><span style={INLINE_ICON}><IconCalendar size={14} /></span> {tr("vault.events", { count: pendingResult.eventCount })}</span>}
             </span>
           </div>
           {pendingResult.summary && <p className="gather-result-summary">{pendingResult.summary}</p>}
@@ -287,7 +299,7 @@ export default function VaultTab() {
                   onChange={() => {}}
                   onClick={(e) => e.stopPropagation()}
                 />
-                <span className="pack-item-type">{item.item_type === "vault" ? "📄" : item.item_type === "email" ? "✉" : "📅"}</span>
+                <span className="pack-item-type"><PackItemTypeIcon type={item.item_type} /></span>
                 <div className="pack-item-body">
                   <p className="pack-item-title">{item.title}</p>
                   {item.reason && <p className="pack-item-reason files-scope-label">{item.reason}</p>}
@@ -322,7 +334,15 @@ export default function VaultTab() {
             return (
               <div key={id}>
                 <article className="file-row group" style={{ cursor: "pointer" }} onClick={() => void handlePackClick(id)} data-entity="GatherPack">
-                  <div className="file-row-icon">{isExpanded ? "▾" : "✧"}</div>
+                  <div className="file-row-icon">
+                    {isExpanded ? (
+                      <span style={{ display: "inline-flex", transform: "rotate(90deg)" }}>
+                        <IconChevronRight size={16} />
+                      </span>
+                    ) : (
+                      <IconSparkles size={16} />
+                    )}
+                  </div>
                   <div className="file-row-body">
                     <p className="file-row-title">{title}</p>
                     <p className="file-row-sub">
@@ -350,7 +370,7 @@ export default function VaultTab() {
                             className="pack-item-row clickable"
                             onClick={() => handlePackItemClick(item)}
                           >
-                            <span className="pack-item-type">{item.item_type === "vault" ? "📄" : item.item_type === "email" ? "✉" : "📅"}</span>
+                            <span className="pack-item-type"><PackItemTypeIcon type={item.item_type} /></span>
                             <div className="pack-item-body">
                               <p className="pack-item-title">{item.title}</p>
                               {item.reason && <p className="pack-item-reason files-scope-label">{item.reason}</p>}

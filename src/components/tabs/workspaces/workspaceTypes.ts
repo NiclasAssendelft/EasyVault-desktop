@@ -1,3 +1,8 @@
+import type { ComponentType } from "react";
+
+/** Shape of the shared icon components exported from src/components/icons.tsx. */
+export type IconComponent = ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+
 export type SpaceMessage = {
   id: string;
   space_id: string;

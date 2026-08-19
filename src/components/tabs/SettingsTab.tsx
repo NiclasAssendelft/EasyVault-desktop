@@ -6,6 +6,7 @@ import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useUiStore } from "../../stores/uiStore";
 import { toDisplayName } from "../../services/helpers";
+import { IconEye, IconClipboard } from "../icons";
 import {
   getApiKey, getExtensionToken, getSavedEmail, getWatchEnabled, getWatchFolder,
   getOnlyofficeJwtSecret, getOnlyofficeServerUrl, saveSettings,
@@ -182,8 +183,8 @@ export default function SettingsTab() {
           <label>{tr("settings.extensionTokenLabel")}</label>
           <div className="token-input-row">
             <input type={showToken ? "text" : "password"} placeholder={tr("settings.extensionTokenPlaceholder")} value={extensionToken} onChange={(e) => setExtensionToken(e.target.value)} />
-            <button type="button" className="ghost token-toggle" onClick={() => setShowToken(!showToken)} title={showToken ? "Hide" : "Show"}>{showToken ? "\u{1F441}" : "\u25CF\u25CF\u25CF"}</button>
-            <button type="button" className="ghost token-toggle" onClick={() => { void navigator.clipboard.writeText(extensionToken).then(() => setStatus(t("settings.saved"))); }} title="Copy">{"\u{1F4CB}"}</button>
+            <button type="button" className="ghost token-toggle" onClick={() => setShowToken(!showToken)} title={showToken ? "Hide" : "Show"}>{showToken ? <IconEye size={14} /> : "\u25CF\u25CF\u25CF"}</button>
+            <button type="button" className="ghost token-toggle" onClick={() => { void navigator.clipboard.writeText(extensionToken).then(() => setStatus(t("settings.saved"))); }} title="Copy"><IconClipboard size={14} /></button>
           </div>
 
           <label>{tr("settings.watchFolderLabel")}</label>
@@ -211,7 +212,7 @@ export default function SettingsTab() {
           <label>{tr("settings.onlyofficeJwtLabel")}</label>
           <div className="token-input-row">
             <input type={showJwt ? "text" : "password"} placeholder={tr("settings.onlyofficeJwtPlaceholder")} value={onlyofficeJwt} onChange={(e) => setOnlyofficeJwt(e.target.value)} />
-            <button type="button" className="ghost token-toggle" onClick={() => setShowJwt(!showJwt)} title={showJwt ? "Hide" : "Show"}>{showJwt ? "\u{1F441}" : "\u25CF\u25CF\u25CF"}</button>
+            <button type="button" className="ghost token-toggle" onClick={() => setShowJwt(!showJwt)} title={showJwt ? "Hide" : "Show"}>{showJwt ? <IconEye size={14} /> : "\u25CF\u25CF\u25CF"}</button>
           </div>
 
           <button type="submit">{tr("settings.save")}</button>

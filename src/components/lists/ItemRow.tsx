@@ -6,6 +6,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
+import { IconStar } from "../icons";
 
 interface Props {
   item: DesktopItem;
@@ -115,7 +116,11 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
           {item.isUploading && <span className="file-uploading-pulse" />}
           {item.title}
           {item.isPinned && <span className="file-pin-badge">{t("list.pinned")}</span>}
-          {item.isFavorite && <span className="file-fav-star">★</span>}
+          {item.isFavorite && (
+            <span className="file-fav-star" style={{ display: "inline-flex", verticalAlign: "-2px" }}>
+              <IconStar size={12} />
+            </span>
+          )}
         </p>
         <div className="file-row-meta">
           <p className="file-row-sub">

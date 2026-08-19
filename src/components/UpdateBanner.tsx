@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useUpdateStore } from "../stores/updateStore";
 import { useT } from "../i18n";
+import { IconCheck, IconAlertTriangle, IconDownload, IconRefresh, IconX } from "./icons";
 
 const RELEASES_URL = "https://github.com/NiclasAssendelft/EasyVault-desktop/releases/latest";
 
@@ -64,7 +65,15 @@ export default function UpdateBanner() {
   return (
     <div className={`update-banner update-banner--${status}`} role="status" aria-live="polite">
       <span className="update-banner-icon" aria-hidden="true">
-        {status === "ready-restart" ? "✓" : status === "failed" ? "!" : "↑"}
+        {status === "ready-restart" ? (
+          <IconCheck size={16} />
+        ) : status === "failed" ? (
+          <IconAlertTriangle size={16} />
+        ) : status === "available" ? (
+          <IconDownload size={16} />
+        ) : (
+          <IconRefresh size={16} />
+        )}
       </span>
 
       <div className="update-banner-body">
@@ -114,16 +123,16 @@ export default function UpdateBanner() {
           <>
             <button type="button" className="update-banner-btn primary" onClick={install}>{t("update.installNow")}</button>
             <button type="button" className="update-banner-btn" onClick={handleManualDownload}>{t("update.downloadInstaller")}</button>
-            <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}>✕</button>
+            <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}><IconX size={14} /></button>
           </>
         )}
         {status === "ready-restart" && (
-          <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}>✕</button>
+          <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}><IconX size={14} /></button>
         )}
         {status === "failed" && (
           <>
             <button type="button" className="update-banner-btn primary" onClick={handleManualDownload}>{t("update.downloadInstaller")}</button>
-            <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}>✕</button>
+            <button type="button" className="update-banner-btn ghost" onClick={dismiss} aria-label={t("update.dismiss")}><IconX size={14} /></button>
           </>
         )}
       </div>

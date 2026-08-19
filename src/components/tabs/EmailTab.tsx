@@ -6,6 +6,7 @@ import { invokeEdgeFunction } from "../../api";
 import { refreshEmailFromRemote } from "../../services/deltaSyncService";
 import { getEmailSyncCount } from "../../storage";
 import { useT, t } from "../../i18n";
+import { IconPaperclip } from "../icons";
 
 const AVATAR_COLORS = [
   "#2563eb", "#7c3aed", "#db2777", "#ea580c",
@@ -232,7 +233,7 @@ export default function EmailTab() {
                     {(isImportant || hasAttachments) && (
                       <div className="email-item-meta">
                         {isImportant && <span className="email-badge email-badge-important">{tr("email.important")}</span>}
-                        {hasAttachments && <span className="email-badge-attachment">&#x1F4CE;</span>}
+                        {hasAttachments && <span className="email-badge-attachment"><IconPaperclip size={13} /></span>}
                       </div>
                     )}
                   </div>

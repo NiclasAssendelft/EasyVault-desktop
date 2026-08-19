@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useFilesStore } from "../../../stores/filesStore";
 import { useUiStore } from "../../../stores/uiStore";
-import { asString, toDisplayName } from "../../../services/helpers";
+import { asString, toDisplayName, formatRelativeTime, extOf } from "../../../services/helpers";
 import { safeEntityUpdate } from "../../../services/entityService";
 import { invokeEdgeFunction } from "../../../api";
 import { refreshSharedFromRemote } from "../../../services/deltaSyncService";
@@ -9,9 +9,31 @@ import { uploadSelectedFilesToSpace } from "../../../services/fileOps";
 import { useT, t } from "../../../i18n";
 import { SUPABASE_FUNCTIONS_URL } from "../../../config";
 import { useEscapeClose } from "../../../hooks/useEscapeClose";
-import type { ActionTarget } from "../../../services/helpers";
+import type { ActionTarget, DesktopItem, DesktopFolder } from "../../../services/helpers";
 import { avatarColor, initials, formatChatTime, formatActivityTime, currentUserEmail, copyTextToClipboard, formatExpiryDate } from "./workspaceHelpers";
-import type { SpaceMember, SpaceMessage, SpaceTask, ActivityEntry, SectionId, SpaceInviteLink } from "./workspaceTypes";
+import type { SpaceMember, SpaceMessage, SpaceTask, ActivityEntry, SectionId, SpaceInviteLink, IconComponent } from "./workspaceTypes";
+import {
+  IconLayoutGrid,
+  IconFolder,
+  IconMessageCircle,
+  IconCheckSquare,
+  IconUsers,
+  IconActivity,
+  IconSettings,
+  IconShare,
+  IconPlus,
+  IconChevronRight,
+  IconFile,
+  IconFileText,
+  IconFileSpreadsheet,
+  IconImage,
+  IconMusic,
+  IconVideo,
+  IconArchive,
+  IconStickyNote,
+  IconLink,
+  IconPin,
+} from "../../icons";
 
 interface WorkspaceDetailProps {
   space: Record<string, unknown>;
@@ -30,6 +52,37 @@ function inviteLinkUrl(link: SpaceInviteLink): string {
 function shortInviteLabel(link: SpaceInviteLink): string {
   if (link.token) return `…/invite/${link.token.slice(0, 8)}…`;
   return link.created_at ? formatExpiryDate(link.created_at) : "…";
+}
+
+/**
+ * Makes a clickable <div> keyboard-accessible (Enter/Space activate) — same
+ * pressable pattern as HomeTab, with a target guard so keydown events bubbling
+ * up from inner buttons don't also activate the card.
+ */
+function pressableCardProps(onActivate: () => void) {
+  return {
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onActivate(); }
+    },
+  };
+}
+
+/** File-type icon for an item row (mirrors the filetype-aware icons on HomeTab). */
+function fileItemIcon(item: DesktopItem): IconComponent {
+  if (item.itemType === "note") return IconStickyNote;
+  if (item.itemType === "link") return IconFile;
+  const ext = (item.fileExtension || extOf(item.title)).toLowerCase();
+  if (["doc", "docx", "txt", "rtf", "pdf", "ppt", "pptx", "odt"].includes(ext)) return IconFileText;
+  if (["xls", "xlsx", "csv", "ods"].includes(ext)) return IconFileSpreadsheet;
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].includes(ext)) return IconImage;
+  if (["mp3", "wav", "m4a", "flac", "ogg"].includes(ext)) return IconMusic;
+  if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext)) return IconVideo;
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return IconArchive;
+  return IconFile;
 }
 
 export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps) {
@@ -76,6 +129,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [shareListLoading, setShareListLoading] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [confirmRemoveEmail, setConfirmRemoveEmail] = useState<string | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const overviewFetchedRef = useRef<string | null>(null);
 
   // ── Computed ──
   const isOwner = useMemo(() => {
@@ -196,6 +251,16 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     const timer = setInterval(() => fetchTasks(activeSpaceId), 10000);
     return () => clearInterval(timer);
   }, [activeSection, activeSpaceId, fetchTasks]);
+
+  // Overview preview data: fetch tasks + latest chat once per space (no polling).
+  useEffect(() => {
+    if (activeSection !== "overview") return;
+    if (overviewFetchedRef.current === activeSpaceId) return;
+    overviewFetchedRef.current = activeSpaceId;
+    setOverviewLoading(true);
+    void Promise.allSettled([fetchTasks(activeSpaceId), fetchChatMessages(activeSpaceId)])
+      .then(() => setOverviewLoading(false));
+  }, [activeSection, activeSpaceId, fetchTasks, fetchChatMessages]);
 
   const fetchActivity = useCallback(async (spaceId: string) => {
     try {
@@ -421,15 +486,17 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   }, [chatInput]);
 
   // ── Section tabs ──
-  const sections: { id: SectionId; label: string; icon: string }[] = useMemo(() => [
-    { id: "overview" as SectionId, label: tr("workspaces.overviewTab"), icon: "\u{1F3E0}" },
-    { id: "files" as SectionId, label: tr("workspaces.filesTab"), icon: "\u{1F4C1}" },
-    { id: "chat" as SectionId, label: tr("workspaces.chatTab"), icon: "\u{1F4AC}" },
-    { id: "tasks" as SectionId, label: tr("workspaces.tasksTab"), icon: "\u2705" },
-    { id: "members" as SectionId, label: tr("workspaces.membersTab"), icon: "\u{1F465}" },
-    { id: "activity" as SectionId, label: tr("workspaces.activityTab"), icon: "\u{1F4CA}" },
-    ...(isOwner ? [{ id: "settings" as SectionId, label: tr("workspaces.settingsTab"), icon: "\u2699\uFE0F" }] : []),
+  const sections: { id: SectionId; label: string; icon: IconComponent }[] = useMemo(() => [
+    { id: "overview" as SectionId, label: tr("workspaces.overviewTab"), icon: IconLayoutGrid },
+    { id: "files" as SectionId, label: tr("workspaces.filesTab"), icon: IconFolder },
+    { id: "chat" as SectionId, label: tr("workspaces.chatTab"), icon: IconMessageCircle },
+    { id: "tasks" as SectionId, label: tr("workspaces.tasksTab"), icon: IconCheckSquare },
+    { id: "members" as SectionId, label: tr("workspaces.membersTab"), icon: IconUsers },
+    { id: "activity" as SectionId, label: tr("workspaces.activityTab"), icon: IconActivity },
+    ...(isOwner ? [{ id: "settings" as SectionId, label: tr("workspaces.settingsTab"), icon: IconSettings }] : []),
   ], [isOwner, tr]);
+
+  const latestMessage = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1] : null;
 
   const spaceName = asString(space.name, tr("workspaces.unnamed"));
   const spaceDesc = asString(space.description);
@@ -442,7 +509,10 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <h2 className="space-detail-name">{spaceName}</h2>
         {isOwner && (
-          <button type="button" onClick={handleOpenShare}>{tr("workspaces.share")}</button>
+          <button type="button" className="btn-share-primary" onClick={handleOpenShare}>
+            <IconShare size={15} />
+            {tr("workspaces.share")}
+          </button>
         )}
       </div>
       {spaceDesc && <p className="space-detail-desc">{spaceDesc}</p>}
@@ -450,7 +520,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
       <div className="space-section-tabs">
         {sections.map((s) => (
           <button key={s.id} type="button" className={activeSection === s.id ? "active" : ""} onClick={() => setActiveSection(s.id)}>
-            <span style={{ marginRight: 4 }}>{s.icon}</span>{s.label}
+            <s.icon size={15} className="space-tab-icon" />
+            {s.label}
           </button>
         ))}
       </div>
@@ -462,6 +533,10 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
           spaceFolders={spaceFolders}
           allMembers={allMembers}
           activeTasks={activeTasks}
+          latestMessage={latestMessage}
+          overviewLoading={overviewLoading}
+          isOwner={isOwner}
+          onInvite={handleOpenShare}
           setActiveSection={setActiveSection}
           setFileActionTargetId={setFileActionTargetId}
         />
@@ -666,83 +741,176 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
 type VaultItem = { id: string; title: string; itemType: string; spaceId?: string };
 type VaultFolder = { id: string; name: string; spaceId?: string };
 
-function WorkspaceOverviewPanel({ spaceItems, spaceFolders, allMembers, activeTasks, setActiveSection, setFileActionTargetId }: {
-  spaceItems: VaultItem[];
-  spaceFolders: VaultFolder[];
+function WorkspaceOverviewPanel({ spaceItems, spaceFolders, allMembers, activeTasks, latestMessage, overviewLoading, isOwner, onInvite, setActiveSection, setFileActionTargetId }: {
+  spaceItems: DesktopItem[];
+  spaceFolders: DesktopFolder[];
   allMembers: { email: string; role: string }[];
   activeTasks: SpaceTask[];
+  latestMessage: SpaceMessage | null;
+  overviewLoading: boolean;
+  isOwner: boolean;
+  onInvite: () => void;
   setActiveSection: (s: SectionId) => void;
   setFileActionTargetId: (id: string) => void;
 }) {
   const tr = useT();
+
+  const recentItems = useMemo(
+    () => [...spaceItems]
+      .sort((a, b) => (b.updatedAtIso || b.createdAtIso).localeCompare(a.updatedAtIso || a.createdAtIso))
+      .slice(0, 3),
+    [spaceItems],
+  );
+
+  const stats: { value: number; label: string }[] = [
+    { value: spaceItems.length, label: tr("workspaces.filesCount") },
+    { value: spaceFolders.length, label: tr("workspaces.foldersCount") },
+    { value: allMembers.length, label: tr("workspaces.membersTab") },
+    { value: activeTasks.length, label: tr("workspaces.openTasks") },
+  ];
+
+  const senderDisplay = latestMessage ? (latestMessage.sender_name || toDisplayName(latestMessage.sender_email)) : "";
+
   return (
     <div className="space-overview">
-      <div className="space-overview-grid">
-        {/* Files summary */}
-        <div className="space-overview-card" onClick={() => setActiveSection("files")} style={{ cursor: "pointer" }}>
-          <div className="space-overview-card-icon">{"\u{1F4C1}"}</div>
-          <div className="space-overview-card-body">
-            <h4>{tr("workspaces.filesTab")}</h4>
-            <p className="space-overview-stat">{spaceItems.length} {tr("workspaces.filesCount")}</p>
-            <p className="space-overview-stat">{spaceFolders.length} {tr("workspaces.foldersCount")}</p>
+      {/* Stat strip */}
+      <div className="space-stat-strip">
+        {stats.map((s) => (
+          <div key={s.label} className="space-stat">
+            <span className="space-stat-num">{s.value}</span>
+            <span className="space-stat-label">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 2x2 preview grid */}
+      <div className="space-overview-grid2">
+        {/* Files preview */}
+        <div className="space-preview-card" {...pressableCardProps(() => setActiveSection("files"))}>
+          <div className="space-preview-head">
+            <h4><IconFolder size={14} />{tr("workspaces.filesTab")}</h4>
+            <span className="space-preview-viewall">{tr("workspaces.viewAll")}<IconChevronRight size={13} /></span>
+          </div>
+          <div className="space-preview-body">
+            {recentItems.length === 0 ? (
+              <div className="space-preview-empty">
+                <p>{tr("workspaces.noFiles")}</p>
+                <button type="button" className="space-preview-cta" onClick={(e) => { e.stopPropagation(); setActiveSection("files"); }}>
+                  {tr("workspaces.addFilesCta")}
+                </button>
+              </div>
+            ) : (
+              recentItems.map((item) => {
+                const RowIcon = fileItemIcon(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="space-preview-row"
+                    onClick={(e) => { e.stopPropagation(); setFileActionTargetId(item.id); }}
+                  >
+                    <span className="space-preview-row-icon"><RowIcon size={15} /></span>
+                    <span className="space-preview-row-title">{item.title}</span>
+                    <span className="space-preview-row-time">{formatRelativeTime(item.updatedAtIso || item.createdAtIso)}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Members summary */}
-        <div className="space-overview-card" onClick={() => setActiveSection("members")} style={{ cursor: "pointer" }}>
-          <div className="space-overview-card-icon">{"\u{1F465}"}</div>
-          <div className="space-overview-card-body">
-            <h4>{tr("workspaces.membersTab")}</h4>
-            <div className="space-card-avatars" style={{ marginTop: 4 }}>
-              {allMembers.slice(0, 5).map((m) => {
+        {/* Members preview */}
+        <div className="space-preview-card" {...pressableCardProps(() => setActiveSection("members"))}>
+          <div className="space-preview-head">
+            <h4><IconUsers size={14} />{tr("workspaces.membersTab")}</h4>
+            <span className="space-preview-viewall">{tr("workspaces.viewAll")}<IconChevronRight size={13} /></span>
+          </div>
+          <div className="space-preview-body">
+            <div className="space-card-avatars">
+              {allMembers.slice(0, 6).map((m) => {
                 const display = toDisplayName(m.email);
                 return (
-                  <div key={m.email} className="space-avatar" style={{ background: avatarColor(display), width: 24, height: 24, fontSize: 10, marginLeft: 0 }}>
+                  <div key={m.email} className="space-avatar" title={m.email} style={{ background: avatarColor(display) }}>
                     {initials(display)}
                   </div>
                 );
               })}
-              {allMembers.length > 5 && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 4 }}>+{allMembers.length - 5}</span>}
+              {allMembers.length > 6 && <span className="space-avatar-overflow">+{allMembers.length - 6}</span>}
             </div>
+            {isOwner && (
+              <button
+                type="button"
+                className={`space-invite-chip${allMembers.length <= 1 ? " emphasized" : ""}`}
+                onClick={(e) => { e.stopPropagation(); onInvite(); }}
+              >
+                <IconPlus size={13} />
+                {tr("workspaces.inviteTeam")}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Tasks summary */}
-        <div className="space-overview-card" onClick={() => setActiveSection("tasks")} style={{ cursor: "pointer" }}>
-          <div className="space-overview-card-icon">{"\u2705"}</div>
-          <div className="space-overview-card-body">
-            <h4>{tr("workspaces.tasksTab")}</h4>
-            <p className="space-overview-stat">{activeTasks.length} {tr("workspaces.openTasks")}</p>
+        {/* Tasks preview */}
+        <div className="space-preview-card" {...pressableCardProps(() => setActiveSection("tasks"))}>
+          <div className="space-preview-head">
+            <h4><IconCheckSquare size={14} />{tr("workspaces.tasksTab")}</h4>
+            <span className="space-preview-viewall">{tr("workspaces.viewAll")}<IconChevronRight size={13} /></span>
+          </div>
+          <div className="space-preview-body">
+            {overviewLoading && activeTasks.length === 0 ? (
+              <p className="space-preview-loading" aria-busy="true">&hellip;</p>
+            ) : activeTasks.length === 0 ? (
+              <div className="space-preview-empty">
+                <p>{tr("workspaces.noTasks")}</p>
+                <button type="button" className="space-preview-cta" onClick={(e) => { e.stopPropagation(); setActiveSection("tasks"); }}>
+                  {tr("workspaces.createTaskCta")}
+                </button>
+              </div>
+            ) : (
+              activeTasks.slice(0, 3).map((task) => (
+                <div key={task.id} className="space-preview-row static">
+                  <span className="space-preview-row-icon">{"\u25cb"}</span>
+                  <span className="space-preview-row-title">{task.title}</span>
+                  {task.due_date && <span className="space-preview-row-time">{task.due_date}</span>}
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Chat shortcut */}
-        <div className="space-overview-card" onClick={() => setActiveSection("chat")} style={{ cursor: "pointer" }}>
-          <div className="space-overview-card-icon">{"\u{1F4AC}"}</div>
-          <div className="space-overview-card-body">
-            <h4>{tr("workspaces.chatTab")}</h4>
-            <p className="space-overview-stat">{tr("workspaces.openChat")}</p>
+        {/* Chat preview */}
+        <div className="space-preview-card" {...pressableCardProps(() => setActiveSection("chat"))}>
+          <div className="space-preview-head">
+            <h4><IconMessageCircle size={14} />{tr("workspaces.chatTab")}</h4>
+            <span className="space-preview-viewall">{tr("workspaces.viewAll")}<IconChevronRight size={13} /></span>
+          </div>
+          <div className="space-preview-body">
+            {overviewLoading && !latestMessage ? (
+              <p className="space-preview-loading" aria-busy="true">&hellip;</p>
+            ) : !latestMessage ? (
+              <div className="space-preview-empty">
+                <p>{tr("workspaces.noMessages")}</p>
+                <button type="button" className="space-preview-cta" onClick={(e) => { e.stopPropagation(); setActiveSection("chat"); }}>
+                  {tr("workspaces.sayHello")}
+                </button>
+              </div>
+            ) : (
+              <div className="space-preview-msg">
+                <div className="space-avatar" style={{ background: avatarColor(senderDisplay), width: 26, height: 26, fontSize: 10, marginLeft: 0 }}>
+                  {initials(senderDisplay)}
+                </div>
+                <div className="space-preview-msg-body">
+                  <span className="space-preview-msg-sender">
+                    {senderDisplay}
+                    <span className="space-preview-msg-time">{formatChatTime(latestMessage.created_at)}</span>
+                  </span>
+                  <p className="space-preview-msg-text">{latestMessage.message}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Recent files */}
-      {spaceItems.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <h4 style={{ margin: "0 0 8px", fontSize: 14, color: "var(--muted)" }}>{tr("workspaces.recentFiles")}</h4>
-          <div className="files-items">
-            {spaceItems.slice(0, 5).map((item) => (
-              <article key={item.id} className="file-row group" style={{ cursor: "pointer" }} onClick={() => setFileActionTargetId(item.id)}>
-                <div className="file-row-icon">{item.itemType === "note" ? "\u{1F4DD}" : item.itemType === "link" ? "\u{1F517}" : "\u{1F4CE}"}</div>
-                <div className="file-row-body">
-                  <p className="file-row-title">{item.title}</p>
-                  <p className="file-row-sub">{item.itemType}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -779,13 +947,13 @@ function WorkspaceFilesPanel({ fileSearch, setFileSearch, canEdit, handleUpload,
           <>
             {filteredFolders.map((folder) => (
               <article key={folder.id} className="file-row group">
-                <div className="file-row-icon">&#x1F4C1;</div>
+                <div className="file-row-icon"><IconFolder size={16} /></div>
                 <div className="file-row-body"><p className="file-row-title">{folder.name}</p></div>
               </article>
             ))}
             {filteredItems.map((item) => (
               <article key={item.id} className="file-row group" style={{ cursor: "pointer" }} onClick={() => setFileActionTargetId(item.id)}>
-                <div className="file-row-icon">{item.itemType === "note" ? "\u{1F4DD}" : item.itemType === "link" ? "\u{1F517}" : "\u{1F4CE}"}</div>
+                <div className="file-row-icon">{item.itemType === "note" ? <IconStickyNote size={16} /> : item.itemType === "link" ? <IconLink size={16} /> : <IconFile size={16} />}</div>
                 <div className="file-row-body">
                   <p className="file-row-title">{item.title}</p>
                   <p className="file-row-sub">{item.itemType}</p>
@@ -827,7 +995,7 @@ function WorkspaceChatPanel({ chatMessages, chatLoading, chatInput, chatSending,
     <div className="space-chat">
       {pinnedMessages.length > 0 && (
         <div className="space-chat-pinned">
-          <span className="space-chat-pinned-label">{"\u{1F4CC}"} {tr("workspaces.pinnedMessages")}</span>
+          <span className="space-chat-pinned-label"><IconPin size={13} /> {tr("workspaces.pinnedMessages")}</span>
           {pinnedMessages.map((pm) => (
             <div key={pm.id} className="space-chat-pinned-msg">
               <strong>{pm.sender_name || toDisplayName(pm.sender_email)}</strong>: {pm.message.slice(0, 80)}{pm.message.length > 80 ? "..." : ""}

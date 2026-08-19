@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from "react";
+import type { ComponentType } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
@@ -6,6 +7,12 @@ import { useAuthStore } from "../../stores/authStore";
 import { asString, asBool } from "../../services/helpers";
 import { useT } from "../../i18n";
 import type { TKey } from "../../i18n";
+import {
+  IconFolder, IconMail, IconCalendar, IconUsers, IconArchive,
+  IconFile, IconFileText, IconFileSpreadsheet, IconImage,
+  IconMusic, IconVideo, IconStickyNote, IconLink, IconPin,
+} from "../icons";
+import type { IconProps } from "../icons";
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -35,24 +42,32 @@ function formatRelative(iso: string): string {
   return formatDateShort(iso); // older than a week → show absolute date
 }
 
-const FILE_ICONS: Record<string, string> = {
-  pdf: "📕",
-  docx: "📘", doc: "📘",
-  xlsx: "📗", xls: "📗", csv: "📗",
-  pptx: "📙", ppt: "📙",
-  png: "🖼️", jpg: "🖼️", jpeg: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️",
-  mp4: "🎬", mov: "🎬", webm: "🎬",
-  mp3: "🎵", wav: "🎵", m4a: "🎵",
-  zip: "🗜️", tar: "🗜️", gz: "🗜️", rar: "🗜️",
-  txt: "📄", md: "📄", rtf: "📄",
+type IconComponent = ComponentType<IconProps>;
+
+const FILE_ICONS: Record<string, IconComponent> = {
+  pdf: IconFileText,
+  docx: IconFileText, doc: IconFileText,
+  xlsx: IconFileSpreadsheet, xls: IconFileSpreadsheet, csv: IconFileSpreadsheet,
+  pptx: IconFileText, ppt: IconFileText,
+  png: IconImage, jpg: IconImage, jpeg: IconImage, gif: IconImage, webp: IconImage, svg: IconImage,
+  mp4: IconVideo, mov: IconVideo, webm: IconVideo,
+  mp3: IconMusic, wav: IconMusic, m4a: IconMusic,
+  zip: IconArchive, tar: IconArchive, gz: IconArchive, rar: IconArchive,
+  txt: IconFileText, md: IconFileText, rtf: IconFileText,
 };
 
-function iconForItem(item: { fileExtension?: string; itemType?: string }): string {
-  if (item.itemType === "link") return "🔗";
-  if (item.itemType === "email_reference") return "✉️";
-  if (item.itemType === "note") return "📝";
+function iconForItem(item: { fileExtension?: string; itemType?: string }): IconComponent {
+  if (item.itemType === "link") return IconLink;
+  if (item.itemType === "email_reference") return IconMail;
+  if (item.itemType === "note") return IconStickyNote;
   const ext = (item.fileExtension || "").replace(/^\./, "").toLowerCase();
-  return FILE_ICONS[ext] || "📄";
+  return FILE_ICONS[ext] || IconFile;
+}
+
+/** Renders the file-type icon for an item (stroke SVG, inherits currentColor). */
+function ItemIcon({ item, size }: { item: { fileExtension?: string; itemType?: string }; size?: number }) {
+  const Icon = iconForItem(item);
+  return <Icon size={size} />;
 }
 
 function greetingKeyForHour(hour: number): TKey {
@@ -162,27 +177,27 @@ export default function HomeTab() {
       {/* ── Navigation cards row ── */}
       <div className="home-nav-row">
         <div className="home-nav-card" {...pressableProps(() => goTo("files"))}>
-          <span className="home-nav-icon">{"\uD83D\uDCC1"}</span>
+          <span className="home-nav-icon"><IconFolder size={20} /></span>
           <span className="home-nav-label">{t("home.files")}</span>
           <span className="home-nav-count">{items.length}</span>
         </div>
         <div className="home-nav-card" {...pressableProps(() => goTo("email"))}>
-          <span className="home-nav-icon">{"\u2709\uFE0F"}</span>
+          <span className="home-nav-icon"><IconMail size={20} /></span>
           <span className="home-nav-label">{t("home.emails")}</span>
           <span className="home-nav-count">{emails.length}</span>
         </div>
         <div className="home-nav-card" {...pressableProps(() => goTo("calendar"))}>
-          <span className="home-nav-icon">{"\uD83D\uDCC5"}</span>
+          <span className="home-nav-icon"><IconCalendar size={20} /></span>
           <span className="home-nav-label">{t("home.calendar")}</span>
           <span className="home-nav-count">{events.length}</span>
         </div>
         <div className="home-nav-card" {...pressableProps(() => goTo("workspaces"))}>
-          <span className="home-nav-icon">{"\uD83D\uDC65"}</span>
+          <span className="home-nav-icon"><IconUsers size={20} /></span>
           <span className="home-nav-label">{t("home.spaces")}</span>
           <span className="home-nav-count">{spaces.length}</span>
         </div>
         <div className="home-nav-card" {...pressableProps(() => goTo("vault"))}>
-          <span className="home-nav-icon">{"\uD83D\uDCE6"}</span>
+          <span className="home-nav-icon"><IconArchive size={20} /></span>
           <span className="home-nav-label">{t("home.gatherPacks")}</span>
           <span className="home-nav-count">{packs.length}</span>
         </div>
@@ -196,7 +211,7 @@ export default function HomeTab() {
         </div>
         {todayEvents.length === 0 ? (
           <div className="home-panel-empty">
-            <span className="home-empty-icon" aria-hidden="true">{"📅"}</span>
+            <span className="home-empty-icon" aria-hidden="true"><IconCalendar size={28} /></span>
             <p className="home-empty-text">{t("home.noSchedule")}</p>
             <button type="button" className="home-empty-cta" onClick={() => goTo("calendar")}>
               {t("home.openCalendar")}
@@ -240,7 +255,7 @@ export default function HomeTab() {
           </div>
           {pinnedItems.length === 0 ? (
             <div className="home-panel-empty">
-              <span className="home-empty-icon" aria-hidden="true">{"📌"}</span>
+              <span className="home-empty-icon" aria-hidden="true"><IconPin size={28} /></span>
               <p className="home-empty-text">{t("home.noPinned")}</p>
               <p className="home-empty-hint">{t("home.noPinnedHint")}</p>
             </div>
@@ -248,7 +263,7 @@ export default function HomeTab() {
             <div className="home-panel-list">
               {pinnedItems.slice(0, 6).map((item) => (
                 <div key={item.id} className="home-panel-row" {...pressableProps(() => goTo("files"))}>
-                  <span className="home-panel-row-icon">{iconForItem(item)}</span>
+                  <span className="home-panel-row-icon"><ItemIcon item={item} size={16} /></span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
                     <p className="home-panel-row-sub">{item.fileExtension ? item.fileExtension.toUpperCase() : item.itemType}</p>
@@ -267,7 +282,7 @@ export default function HomeTab() {
           </div>
           {upcomingMeetings.length === 0 ? (
             <div className="home-panel-empty">
-              <span className="home-empty-icon" aria-hidden="true">{"🗓️"}</span>
+              <span className="home-empty-icon" aria-hidden="true"><IconCalendar size={28} /></span>
               <p className="home-empty-text">{t("home.noMeetings")}</p>
               <button type="button" className="home-empty-cta" onClick={() => goTo("calendar")}>
                 {t("home.openCalendar")}
@@ -281,7 +296,7 @@ export default function HomeTab() {
                 const start = asString(ev.start_time);
                 return (
                   <div key={id} className="home-panel-row" {...pressableProps(() => goTo("calendar"))}>
-                    <span className="home-panel-row-icon">{"\uD83D\uDCC5"}</span>
+                    <span className="home-panel-row-icon"><IconCalendar size={16} /></span>
                     <div className="home-panel-row-body">
                       <p className="home-panel-row-title">{title}</p>
                       <p className="home-panel-row-sub">{formatDateShort(start)}</p>
@@ -301,7 +316,7 @@ export default function HomeTab() {
           </div>
           {recentFiles.length === 0 ? (
             <div className="home-panel-empty">
-              <span className="home-empty-icon" aria-hidden="true">{"📄"}</span>
+              <span className="home-empty-icon" aria-hidden="true"><IconFileText size={28} /></span>
               <p className="home-empty-text">{t("home.noRecentFiles")}</p>
               <button type="button" className="home-empty-cta" onClick={() => goTo("queue")}>
                 {t("home.openDropzone")}
@@ -311,7 +326,7 @@ export default function HomeTab() {
             <div className="home-panel-list">
               {recentFiles.slice(0, 6).map((item) => (
                 <div key={item.id} className="home-panel-row" {...pressableProps(() => goTo("files"))}>
-                  <span className="home-panel-row-icon">{iconForItem(item)}</span>
+                  <span className="home-panel-row-icon"><ItemIcon item={item} size={16} /></span>
                   <div className="home-panel-row-body">
                     <p className="home-panel-row-title">{item.title}</p>
                     <p className="home-panel-row-sub">
@@ -333,7 +348,7 @@ export default function HomeTab() {
           </div>
           {importantEmails.length === 0 ? (
             <div className="home-panel-empty">
-              <span className="home-empty-icon" aria-hidden="true">{"✉️"}</span>
+              <span className="home-empty-icon" aria-hidden="true"><IconMail size={28} /></span>
               <p className="home-empty-text">{t("home.noImportantEmails")}</p>
               <p className="home-empty-hint">{t("home.noImportantEmailsHint")}</p>
             </div>
@@ -345,7 +360,7 @@ export default function HomeTab() {
                 const from = asString(email.from_address, asString(email.sender, ""));
                 return (
                   <div key={id} className="home-panel-row" {...pressableProps(() => goTo("email"))}>
-                    <span className="home-panel-row-icon">{"\u2757"}</span>
+                    <span className="home-panel-row-icon"><IconMail size={16} /></span>
                     <div className="home-panel-row-body">
                       <p className="home-panel-row-title">{subject}</p>
                       <p className="home-panel-row-sub">{from}</p>

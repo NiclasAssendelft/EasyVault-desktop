@@ -6,6 +6,7 @@ import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
+import { IconFolder } from "../icons";
 
 interface Props {
   folder: DesktopFolder;
@@ -51,7 +52,7 @@ export default function FolderCard({ folder, onClick, selectMode, selected, onTo
           onClick={(e) => e.stopPropagation()}
         />
       )}
-      <div className="folder-icon-box">📁</div>
+      <div className="folder-icon-box"><IconFolder size={20} /></div>
       <div className="folder-card-body">
         <p className="folder-card-name">
           {folder.name}

@@ -1,9 +1,15 @@
+import type { ComponentType } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { useUiStore } from "../stores/uiStore";
 import { useT } from "../i18n";
 import type { TabName } from "../services/helpers";
 import type { TKey } from "../i18n";
 import logoImg from "../assets/logo.png";
+import {
+  IconHome, IconFolder, IconMail, IconLink, IconCalendar,
+  IconLock, IconUsers, IconInbox, IconSettings,
+} from "./icons";
+import type { IconProps } from "./icons";
 
 function initialsFromEmail(email: string): string {
   if (!email) return "?";
@@ -24,16 +30,16 @@ function displayNameFromEmail(email: string): string {
     .join(" ");
 }
 
-const TABS: { name: TabName; labelKey: TKey; icon: string }[] = [
-  { name: "home", labelKey: "nav.home", icon: "\u{1F3E0}" },
-  { name: "files", labelKey: "nav.files", icon: "\u{1F4C1}" },
-  { name: "email", labelKey: "nav.email", icon: "\u{1F4E7}" },
-  { name: "links", labelKey: "nav.links", icon: "\u{1F517}" },
-  { name: "calendar", labelKey: "nav.calendar", icon: "\u{1F4C5}" },
-  { name: "vault", labelKey: "nav.vault", icon: "\u{1F512}" },
-  { name: "workspaces", labelKey: "nav.workspaces", icon: "\u{1F465}" },
-  { name: "queue", labelKey: "nav.dropzone", icon: "\u{1F4E5}" },
-  { name: "settings", labelKey: "nav.settings", icon: "\u2699\uFE0F" },
+const TABS: { name: TabName; labelKey: TKey; icon: ComponentType<IconProps> }[] = [
+  { name: "home", labelKey: "nav.home", icon: IconHome },
+  { name: "files", labelKey: "nav.files", icon: IconFolder },
+  { name: "email", labelKey: "nav.email", icon: IconMail },
+  { name: "links", labelKey: "nav.links", icon: IconLink },
+  { name: "calendar", labelKey: "nav.calendar", icon: IconCalendar },
+  { name: "vault", labelKey: "nav.vault", icon: IconLock },
+  { name: "workspaces", labelKey: "nav.workspaces", icon: IconUsers },
+  { name: "queue", labelKey: "nav.dropzone", icon: IconInbox },
+  { name: "settings", labelKey: "nav.settings", icon: IconSettings },
 ];
 
 export default function Sidebar() {
@@ -65,7 +71,7 @@ export default function Sidebar() {
             className={`nav-btn${activeTab === tab.name ? " active" : ""}`}
             onClick={() => setActiveTab(tab.name)}
           >
-            <span className="nav-btn-icon">{tab.icon}</span>{t(tab.labelKey)}
+            <span className="nav-btn-icon"><tab.icon size={18} /></span>{t(tab.labelKey)}
           </button>
         ))}
       </nav>

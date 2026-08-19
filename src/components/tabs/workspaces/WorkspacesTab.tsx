@@ -8,14 +8,15 @@ import { entityCreate, entityDelete, invokeEdgeFunction } from "../../../api";
 import { refreshSharedFromRemote, refreshAccessScope } from "../../../services/deltaSyncService";
 import { useT, t } from "../../../i18n";
 import { avatarColor, initials, currentUserEmail, extractInviteToken } from "./workspaceHelpers";
-import type { SpaceMember } from "./workspaceTypes";
+import type { SpaceMember, IconComponent } from "./workspaceTypes";
 import WorkspaceDetail from "./WorkspaceDetail";
+import { IconFile, IconClipboard, IconBriefcase, IconUsers } from "../../icons";
 
 const TEMPLATES = [
-  { id: "blank", icon: "\u{1F4C4}", nameKey: "workspaces.templateBlank" as const, folders: [] as string[], tasks: [] as string[], welcome: "" },
-  { id: "project", icon: "\u{1F4CB}", nameKey: "workspaces.templateProject" as const, folders: ["Documents", "Assets", "Deliverables"], tasks: ["Define project scope", "Set timeline and milestones", "Assign team roles"], welcome: "Welcome to the project space! Check the Tasks tab to get started." },
-  { id: "client", icon: "\u{1F91D}", nameKey: "workspaces.templateClient" as const, folders: ["Contracts", "Invoices", "Reports"], tasks: ["Upload signed contract", "Send initial invoice", "Schedule kickoff meeting"], welcome: "Client portal ready. Use this space to share documents and track progress." },
-  { id: "team", icon: "\u{1F465}", nameKey: "workspaces.templateTeam" as const, folders: ["Guides", "Templates", "Meeting Notes"], tasks: ["Add team handbook", "Set up recurring meeting notes", "Document onboarding process"], welcome: "Team wiki initialized. Start documenting your processes and knowledge." },
+  { id: "blank", icon: IconFile as IconComponent, nameKey: "workspaces.templateBlank" as const, folders: [] as string[], tasks: [] as string[], welcome: "" },
+  { id: "project", icon: IconClipboard as IconComponent, nameKey: "workspaces.templateProject" as const, folders: ["Documents", "Assets", "Deliverables"], tasks: ["Define project scope", "Set timeline and milestones", "Assign team roles"], welcome: "Welcome to the project space! Check the Tasks tab to get started." },
+  { id: "client", icon: IconBriefcase as IconComponent, nameKey: "workspaces.templateClient" as const, folders: ["Contracts", "Invoices", "Reports"], tasks: ["Upload signed contract", "Send initial invoice", "Schedule kickoff meeting"], welcome: "Client portal ready. Use this space to share documents and track progress." },
+  { id: "team", icon: IconUsers as IconComponent, nameKey: "workspaces.templateTeam" as const, folders: ["Guides", "Templates", "Meeting Notes"], tasks: ["Add team handbook", "Set up recurring meeting notes", "Document onboarding process"], welcome: "Team wiki initialized. Start documenting your processes and knowledge." },
 ];
 
 export default function WorkspacesTab() {
@@ -246,7 +247,7 @@ export default function WorkspacesTab() {
                     className={`space-template-card${selectedTemplate === tmpl.id ? " active" : ""}`}
                     onClick={() => setSelectedTemplate(tmpl.id)}
                   >
-                    <span className="space-template-icon">{tmpl.icon}</span>
+                    <span className="space-template-icon"><tmpl.icon size={18} /></span>
                     <span className="space-template-name">{tr(tmpl.nameKey)}</span>
                   </button>
                 ))}

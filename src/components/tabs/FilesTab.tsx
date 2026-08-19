@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -8,6 +9,10 @@ import { useSyncStore } from "../../stores/syncStore";
 import { useT } from "../../i18n";
 import FolderCard from "../lists/FolderCard";
 import ItemRow from "../lists/ItemRow";
+import { IconClock, IconUsers, IconPin, IconFolder, IconHome, IconChevronRight, IconX } from "../icons";
+
+/** Aligns an inline SVG icon with adjacent text inside buttons. */
+const INLINE_ICON: CSSProperties = { display: "inline-flex", verticalAlign: "-3px" };
 
 type CategoryFilter = "all" | "recent" | "shared" | "pinned";
 
@@ -193,7 +198,7 @@ export default function FilesTab() {
             </button>
             {folders.map((f) => (
               <button key={f.id} type="button" onClick={() => { void handleBulkMove(f.id); setMovePickerOpen(false); }}>
-                📁 {f.name}
+                <span style={INLINE_ICON}><IconFolder size={14} /></span> {f.name}
               </button>
             ))}
           </div>
@@ -208,7 +213,7 @@ export default function FilesTab() {
       <section className="tab-panel">
         <div className="files-folder-head">
           <div className="files-folder-crumb">
-            ⌂ <span>›</span> <span>{activeFolder.name}</span>
+            <IconHome size={16} /> <IconChevronRight size={14} /> <span>{activeFolder.name}</span>
           </div>
           <div className="actions-row file-head-actions">
             <button type="button" className="ghost" onClick={handleUpload}>{t("files.upload")}</button>
@@ -276,7 +281,7 @@ export default function FilesTab() {
           className={`files-category-card cat-recent${categoryFilter === "recent" ? " active" : ""}`}
           onClick={() => setCategoryFilter(categoryFilter === "recent" ? "all" : "recent")}
         >
-          <span className="cat-icon">&#128337;</span>
+          <span className="cat-icon"><IconClock size={22} /></span>
           <div>
             <div className="cat-label">{t("files.catRecent")}</div>
             <div className="cat-count">{recentItems.length} {t("files.catItems")}</div>
@@ -287,7 +292,7 @@ export default function FilesTab() {
           className={`files-category-card cat-shared${categoryFilter === "shared" ? " active" : ""}`}
           onClick={() => setCategoryFilter(categoryFilter === "shared" ? "all" : "shared")}
         >
-          <span className="cat-icon">&#128101;</span>
+          <span className="cat-icon"><IconUsers size={22} /></span>
           <div>
             <div className="cat-label">{t("files.catShared")}</div>
             <div className="cat-count">{sharedItems.length} {t("files.catItems")}</div>
@@ -298,7 +303,7 @@ export default function FilesTab() {
           className={`files-category-card cat-pinned${categoryFilter === "pinned" ? " active" : ""}`}
           onClick={() => setCategoryFilter(categoryFilter === "pinned" ? "all" : "pinned")}
         >
-          <span className="cat-icon">{"\uD83D\uDCCC"}</span>
+          <span className="cat-icon"><IconPin size={22} /></span>
           <div>
             <div className="cat-label">{t("files.catPinned")}</div>
             <div className="cat-count">{pinnedItems.length} {t("files.catItems")}</div>
@@ -326,7 +331,7 @@ export default function FilesTab() {
           ))}
           {selectedTags.size > 0 && (
             <button type="button" className="tag-chip tag-chip-clear" onClick={() => setSelectedTags(new Set())}>
-              {"\u2715"}
+              <span style={INLINE_ICON}><IconX size={13} /></span>
             </button>
           )}
         </div>
