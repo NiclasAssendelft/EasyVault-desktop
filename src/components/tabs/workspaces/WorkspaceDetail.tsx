@@ -7,7 +7,7 @@ import { invokeEdgeFunction } from "../../../api";
 import { refreshSharedFromRemote } from "../../../services/deltaSyncService";
 import { uploadSelectedFilesToSpace } from "../../../services/fileOps";
 import { useT, t } from "../../../i18n";
-import { SUPABASE_FUNCTIONS_URL } from "../../../config";
+import { INVITE_PAGE_BASE } from "../../../config";
 import { useEscapeClose } from "../../../hooks/useEscapeClose";
 import type { ActionTarget, DesktopItem, DesktopFolder } from "../../../services/helpers";
 import { avatarColor, initials, formatChatTime, formatActivityTime, currentUserEmail, copyTextToClipboard, formatExpiryDate } from "./workspaceHelpers";
@@ -45,7 +45,7 @@ type CurrentShareLink = { id: string; url: string; expiresAt: string | null };
 
 function inviteLinkUrl(link: SpaceInviteLink): string {
   if (link.url) return link.url;
-  return link.token ? `${SUPABASE_FUNCTIONS_URL}/invite/${link.token}` : "";
+  return link.token ? `${INVITE_PAGE_BASE}#${link.token}` : "";
 }
 
 /** Compact row label for the Active-links list: token prefix, or created date as fallback. */

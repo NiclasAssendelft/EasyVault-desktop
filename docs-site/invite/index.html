@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>You&#39;re invited — EasyVault</title>
+  <style>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: grid; place-items: center;
+      background: radial-gradient(ellipse at 50% 0%, rgba(108,71,255,0.18), transparent 60%), #0b0f18;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 24px 0;
+    }
+    :focus-visible { outline: 2px solid #7c6af7; outline-offset: 2px; }
+    .card {
+      width: 92%; max-width: 430px;
+      padding: 34px 30px;
+      background: rgba(20, 20, 32, 0.92);
+      border: 1px solid rgba(124, 106, 247, 0.32);
+      border-radius: 14px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+    .brand {
+      font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+      color: rgba(196,181,253,0.6); margin-bottom: 20px;
+    }
+    .eyebrow {
+      margin: 0 0 6px; font-size: 12px; letter-spacing: 0.14em;
+      text-transform: uppercase; color: rgba(228,228,231,0.5);
+    }
+    h1 { margin: 0 0 10px; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: break-word; }
+    .sub { margin: 0 0 22px; font-size: 14px; line-height: 1.5; color: rgba(228,228,231,0.62); overflow-wrap: break-word; }
+    .sub strong { color: #c4b5fd; font-weight: 600; }
+    .primary {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; min-height: 48px;
+      padding: 13px; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: #c4b5fd; background: linear-gradient(135deg, rgba(124,106,247,0.22), rgba(100,82,220,0.12));
+      border: 1px solid rgba(124,106,247,0.45); border-radius: 6px;
+      text-decoration: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .primary:hover { border-color: rgba(124,106,247,0.78); box-shadow: 0 0 22px rgba(124,106,247,0.22); }
+    .primary-hint { margin: 10px 0 0; font-size: 12px; color: rgba(228,228,231,0.4); }
+    .divider { margin: 24px 0; height: 1px; background: rgba(255,255,255,0.07); }
+    .section-title { margin: 0 0 12px; font-size: 13px; color: rgba(228,228,231,0.7); }
+    .dl-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .dl {
+      flex: 1 1 30%; min-width: 110px; min-height: 44px;
+      display: block; padding: 10px 8px;
+      background: #101018; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px; color: #e4e4e7; font-size: 13px;
+      text-decoration: none; position: relative;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .dl:hover { border-color: rgba(124,106,247,0.5); box-shadow: 0 0 0 3px rgba(124,106,247,0.12); }
+    .dl span { display: block; margin-top: 3px; font-size: 11px; color: rgba(228,228,231,0.45); }
+    .dl.recommended { border-color: rgba(124,106,247,0.55); }
+    .dl.recommended::after {
+      content: "Recommended";
+      display: block; margin-top: 5px; font-size: 10px;
+      letter-spacing: 0.08em; text-transform: uppercase; color: #c4b5fd;
+    }
+    .dl-single { flex: none; }
+    .all-downloads {
+      display: inline-block; margin-top: 12px; font-size: 12px;
+      color: rgba(196,181,253,0.7); text-decoration: none;
+    }
+    .all-downloads:hover { color: #c4b5fd; }
+    .after-hint { margin: 14px 0 0; font-size: 12px; color: rgba(228,228,231,0.4); }
+    .manual-hint { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: rgba(228,228,231,0.62); }
+    .manual-hint strong { color: #c4b5fd; font-weight: 600; }
+    .code {
+      display: block; padding: 12px 10px;
+      background: #101018; border: 1px dashed rgba(124,106,247,0.4);
+      border-radius: 8px; color: #c4b5fd;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px; letter-spacing: 0.04em;
+      overflow-wrap: break-word; word-break: break-all;
+      cursor: pointer; user-select: all;
+    }
+    .copy-hint { margin: 8px 0 0; font-size: 11px; color: rgba(228,228,231,0.4); }
+    .footer { margin-top: 22px; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(228,228,231,0.28); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">EasyVault</div>
+
+    <!-- No / malformed token -->
+    <div id="state-invalid" hidden>
+      <h1>This invite link looks incomplete</h1>
+      <p class="sub">Ask your teammate for a new one.</p>
+    </div>
+
+    <!-- Expired / used-up invite -->
+    <div id="state-expired" hidden>
+      <h1>This invite has expired</h1>
+      <p class="sub">Ask your teammate for a new link.</p>
+    </div>
+
+    <!-- Valid (or unverified-but-plausible) invite -->
+    <div id="state-invite" hidden>
+      <p class="eyebrow">You&#39;re invited</p>
+      <h1 id="space-name">A shared space</h1>
+      <p class="sub"><strong id="inviter">A teammate</strong> invited you to join this space in EasyVault.</p>
+      <a class="primary" id="open-app" href="#" aria-label="Open this invite in the EasyVault app">Open in EasyVault</a>
+      <p class="primary-hint">Already have the app? This opens it and joins the space.</p>
+
+      <div class="divider" role="presentation"></div>
+
+      <div class="downloads">
+        <p class="section-title">Nothing happened? Install EasyVault first:</p>
+        <div class="dl-grid" id="dl-grid" hidden></div>
+        <a class="dl dl-single" id="dl-fallback"
+           href="https://github.com/NiclasAssendelft/EasyVault-desktop/releases/latest">Download EasyVault<span>All platforms</span></a>
+        <a class="all-downloads" id="all-downloads" hidden
+           href="https://github.com/NiclasAssendelft/EasyVault-desktop/releases/latest">All downloads</a>
+        <p class="after-hint">Installed? Click <strong>Open in EasyVault</strong> again.</p>
+      </div>
+
+      <div class="divider" role="presentation"></div>
+
+      <div class="manual">
+        <p class="section-title">Or join with a code</p>
+        <p class="manual-hint">In EasyVault, choose <strong>Join space</strong> and paste this code:</p>
+        <code class="code" id="invite-code" tabindex="0" role="button"
+              aria-label="Invite code, activate to copy it to the clipboard"></code>
+        <p class="copy-hint" id="copy-hint" aria-live="polite">Click the code to copy it</p>
+      </div>
+    </div>
+
+    <div class="footer">EasyVault</div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var INVITE_API = "https://ocokoemfmdodzftqbjim.supabase.co/functions/v1/invite";
+      var RELEASES_URL = "https://github.com/NiclasAssendelft/EasyVault-desktop/releases/latest";
+      var GITHUB_LATEST_API = "https://api.github.com/repos/NiclasAssendelft/EasyVault-desktop/releases/latest";
+
+      var stateInvalid = document.getElementById("state-invalid");
+      var stateExpired = document.getElementById("state-expired");
+      var stateInvite = document.getElementById("state-invite");
+
+      function show(el) {
+        stateInvalid.hidden = true;
+        stateExpired.hidden = true;
+        stateInvite.hidden = true;
+        el.hidden = false;
+      }
+
+      // --- Token from the URL fragment (persists across reloads) ---
+      var raw = (window.location.hash || "").replace(/^#/, "");
+      if (!/^[0-9a-f]{48}$/i.test(raw)) {
+        show(stateInvalid);
+        return;
+      }
+      var token = raw.toLowerCase();
+
+      // --- Generic invite UI immediately; upgraded once the API answers ---
+      document.getElementById("open-app").setAttribute("href", "easyvault://invite/" + token);
+      var codeEl = document.getElementById("invite-code");
+      codeEl.textContent = token;
+      show(stateInvite);
+
+      // --- Click-to-copy code ---
+      var hintEl = document.getElementById("copy-hint");
+      function copyCode() {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          hintEl.textContent = "Select the code and copy it manually";
+          return;
+        }
+        navigator.clipboard.writeText(token).then(function () {
+          hintEl.textContent = "Copied to clipboard";
+        }).catch(function () {
+          hintEl.textContent = "Select the code and copy it manually";
+        });
+      }
+      codeEl.addEventListener("click", copyCode);
+      codeEl.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+          copyCode();
+        }
+      });
+
+      // --- Invite details (degrades to the generic wording on failure) ---
+      fetch(INVITE_API + "?token=" + encodeURIComponent(token) + "&format=json")
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (!data || typeof data !== "object") return;
+          if (data.valid === false) {
+            show(stateExpired);
+            return;
+          }
+          if (data.valid === true) {
+            // API values are untrusted: always inserted via textContent.
+            if (typeof data.space_name === "string" && data.space_name.trim()) {
+              document.getElementById("space-name").textContent = data.space_name.trim();
+            }
+            if (typeof data.inviter === "string" && data.inviter.trim()) {
+              document.getElementById("inviter").textContent = data.inviter.trim();
+            }
+          }
+        })
+        .catch(function () { /* keep the generic invite UI */ });
+
+      // --- Downloads: swap the all-platforms fallback for direct asset links ---
+      function assetUrl(assets, suffix) {
+        for (var i = 0; i < assets.length; i++) {
+          var a = assets[i];
+          if (a && typeof a.name === "string" &&
+              typeof a.browser_download_url === "string" &&
+              a.name.indexOf("EasyVault_") === 0 &&
+              a.name.length > suffix.length &&
+              a.name.slice(-suffix.length) === suffix) {
+            return a.browser_download_url;
+          }
+        }
+        return null;
+      }
+
+      function makeDl(platform, url, label, detail) {
+        var link = document.createElement("a");
+        link.className = "dl";
+        link.setAttribute("data-platform", platform);
+        link.setAttribute("href", url);
+        link.setAttribute("aria-label", "Download EasyVault for " + label + " (" + detail + ")");
+        link.appendChild(document.createTextNode(label));
+        var span = document.createElement("span");
+        span.textContent = detail;
+        link.appendChild(span);
+        return link;
+      }
+
+      fetch(GITHUB_LATEST_API, { headers: { Accept: "application/vnd.github+json" } })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (release) {
+          var assets = (release && Array.isArray(release.assets)) ? release.assets : [];
+          var macArm = assetUrl(assets, "_aarch64.dmg");
+          var macIntel = assetUrl(assets, "_x64.dmg");
+          var winExe = assetUrl(assets, "_x64-setup.exe");
+          if (!macArm && !macIntel && !winExe) throw new Error("no matching assets");
+
+          var grid = document.getElementById("dl-grid");
+          if (macArm) grid.appendChild(makeDl("mac-arm", macArm, "macOS", "Apple Silicon"));
+          if (macIntel) grid.appendChild(makeDl("mac-intel", macIntel, "macOS", "Intel"));
+          if (winExe) grid.appendChild(makeDl("windows", winExe, "Windows", "64-bit installer"));
+
+          var ua = navigator.userAgent.toLowerCase();
+          var target = null;
+          if (ua.indexOf("windows") !== -1) target = "windows";
+          else if (ua.indexOf("mac") !== -1) target = "mac-arm";
+          if (target) {
+            var rec = grid.querySelector('[data-platform="' + target + '"]');
+            if (rec) rec.classList.add("recommended");
+          }
+
+          document.getElementById("dl-fallback").hidden = true;
+          document.getElementById("all-downloads").hidden = false;
+          grid.hidden = false;
+        })
+        .catch(function () { /* keep the single releases/latest link */ });
+    })();
+  </script>
+</body>
+</html>

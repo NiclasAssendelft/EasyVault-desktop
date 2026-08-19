@@ -21,6 +21,10 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const DEFAULT_API_KEY = "830e035bb5ad402a9534f1ac08cf2dc6";
+
+// Hosted invite page (GitHub Pages — Supabase rewrites text/html on the
+// functions domain, so pages live here; token travels in the URL fragment).
+export const INVITE_PAGE_BASE = "https://niclasassendelft.github.io/EasyVault-desktop/invite/";
 export const CHUNK_SIZE = 5 * 1024 * 1024;
 export const WATCH_INTERVAL_MS = 1500;
 export const WATCH_DEBOUNCE_MS = 2000;

@@ -49,7 +49,10 @@ export function currentUserEmail(): string {
  */
 export function extractInviteToken(input: string): string {
   const trimmed = input.trim();
-  const match = trimmed.match(/\/invite\/([0-9a-f]{48})/i);
+  // Accept every invite URL shape: the functions path (…/invite/<token>),
+  // the GitHub Pages fragment form (…/invite/#<token>, …/invite/index.html#<token>),
+  // and the deep link (easyvault://invite/<token>).
+  const match = trimmed.match(/invite(?:\/|\/index\.html)?#?\/?([0-9a-f]{48})/i);
   if (match) return match[1].toLowerCase();
   return trimmed;
 }
