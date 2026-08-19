@@ -86,7 +86,10 @@ export function saveUploadedWatchSignatures(signatures: Set<string>): void {
 }
 
 export function getOnlyofficeJwtSecret(): string {
-  return localStorage.getItem(STORAGE_KEYS.onlyofficeJwtSecret) || "ev-oo-jwt-8491fda228f7c788ae2ee056155bbcd0";
+  // Deliberately no baked-in fallback: the ONLYOFFICE editor config is signed
+  // server-side by the onlyoffice-editor-session edge function. An empty string
+  // means "no secret configured on this device".
+  return localStorage.getItem(STORAGE_KEYS.onlyofficeJwtSecret) || "";
 }
 
 export function setOnlyofficeJwtSecret(secret: string): void {

@@ -479,8 +479,29 @@ fn relay_port() -> u16 {
         .unwrap_or(ONLYOFFICE_RELAY_PORT_DEFAULT)
 }
 
+fn relay_bind_host() -> String {
+    // Loopback by default: the in-app editor iframe talks to the relay via
+    // http://localhost:17171, and Docker Desktop (macOS/Windows) forwards
+    // host.docker.internal traffic to the host's loopback, so local docker dev
+    // still works. The remote ONLYOFFICE server never calls the relay directly
+    // — its callbacks go to the onlyoffice-callback edge function upstream.
+    // Linux docker dev (host-gateway routes via the bridge, not loopback) can
+    // opt back into 0.0.0.0 via EASYVAULT_ONLYOFFICE_RELAY_BIND.
+    std::env::var("EASYVAULT_ONLYOFFICE_RELAY_BIND")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "127.0.0.1".to_string())
+}
+
 #[tauri::command]
 fn get_onlyoffice_relay_info() -> OnlyofficeRelayInfo {
+    // container_callback_url is only handed to the ONLYOFFICE server when the
+    // configured server URL is localhost-ish (see onlyofficeService.ts). With
+    // the default loopback bind it stays reachable under Docker Desktop
+    // (macOS/Windows), which delivers host.docker.internal via loopback; Linux
+    // docker dev must set EASYVAULT_ONLYOFFICE_RELAY_BIND=0.0.0.0 for it to
+    // resolve to a listening socket.
     let port = relay_port();
     OnlyofficeRelayInfo {
         enabled: true,
@@ -745,7 +766,9 @@ fn call_file_versions_fallback(
 fn start_onlyoffice_callback_relay() {
     let port = relay_port();
     thread::spawn(move || {
-        let bind_addr = format!("0.0.0.0:{port}");
+        // Bind loopback-only by default (see relay_bind_host for the rationale
+        // and the EASYVAULT_ONLYOFFICE_RELAY_BIND escape hatch).
+        let bind_addr = format!("{}:{port}", relay_bind_host());
         let server = match Server::http(&bind_addr) {
             Ok(s) => s,
             Err(err) => {

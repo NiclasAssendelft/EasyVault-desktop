@@ -6,6 +6,7 @@ import { useUiStore } from "../stores/uiStore";
 import { syncRemoteDelta } from "./deltaSyncService";
 import { asString } from "./helpers";
 import { invokeEdgeFunction } from "../api";
+import { t } from "../i18n";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -192,6 +193,18 @@ export async function launchOnlyofficeEditor(fileId: string): Promise<void> {
     console.log("ONLYOFFICE: edge function returned:", JSON.stringify(payload).slice(0, 200));
 
     const serverConfig = (payload.config as Record<string, unknown>) || {};
+
+    // The editor config JWT is signed server-side by the edge function
+    // (ONLYOFFICE_JWT_SECRET). The desktop app no longer ships a built-in
+    // secret, so an unsigned config means the integration isn't configured —
+    // a JWT-enabled document server would reject the session. Fail fast with
+    // a clear message instead of a cryptic 20s editor timeout.
+    if (!asString(serverConfig.token)) {
+      console.warn("ONLYOFFICE launch aborted: edge function returned an unsigned editor config");
+      setStatus(t("onlyoffice.secretMissing"));
+      usePreviewEditStore.getState().close();
+      return;
+    }
 
     // Resolve ONLYOFFICE document server URL
     const configuredServerUrl = getOnlyofficeServerUrl();

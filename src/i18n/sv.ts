@@ -357,7 +357,7 @@ const sv: Record<keyof typeof en, string> = {
   "settings.onlyofficeUrlLabel": "ONLYOFFICE server-URL",
   "settings.onlyofficeUrlPlaceholder": "https://onlyoffice.yourdomain.com",
   "settings.onlyofficeJwtLabel": "ONLYOFFICE JWT-hemlighet",
-  "settings.onlyofficeJwtPlaceholder": "Lämna tomt för att använda inbyggt standardvärde",
+  "settings.onlyofficeJwtPlaceholder": "Klistra in JWT-hemligheten från din ONLYOFFICE-server",
   "settings.emailSyncCountLabel": "Antal e-postmeddelanden att synka per leverantör",
   "settings.save": "Spara inställningar",
   "settings.saved": "Inställningar sparade",
@@ -594,6 +594,7 @@ const sv: Record<keyof typeof en, string> = {
   "office.bridgeMissing": "ONLYOFFICE startbrygga saknas",
   "office.launching": "Startar ONLYOFFICE...",
   "office.saveMessage": "Använd spara-funktionen i ONLYOFFICE",
+  "onlyoffice.secretMissing": "ONLYOFFICE är inte konfigurerat — lägg till JWT-hemligheten i Inställningar.",
 
   // Image/Pintura Adapter
   "image.noPreview": "Ingen bildförhandsgranskning tillgänglig",

@@ -357,7 +357,7 @@ const fi: Record<keyof typeof en, string> = {
   "settings.onlyofficeUrlLabel": "ONLYOFFICE-palvelimen URL",
   "settings.onlyofficeUrlPlaceholder": "https://onlyoffice.yourdomain.com",
   "settings.onlyofficeJwtLabel": "ONLYOFFICE JWT-salaisuus",
-  "settings.onlyofficeJwtPlaceholder": "Jätä tyhjäksi käyttääksesi oletusarvoa",
+  "settings.onlyofficeJwtPlaceholder": "Liitä ONLYOFFICE-palvelimen JWT-salaisuus",
   "settings.emailSyncCountLabel": "Synkronoitavien sähköpostien määrä per palvelu",
   "settings.save": "Tallenna asetukset",
   "settings.saved": "Asetukset tallennettu",
@@ -594,6 +594,7 @@ const fi: Record<keyof typeof en, string> = {
   "office.bridgeMissing": "ONLYOFFICE-käynnistyssilta puuttuu",
   "office.launching": "Käynnistetään ONLYOFFICE...",
   "office.saveMessage": "Käytä ONLYOFFICE:n sisäistä tallennusta",
+  "onlyoffice.secretMissing": "ONLYOFFICE-integraatiota ei ole määritetty — lisää JWT-salaisuus asetuksiin.",
 
   // Image/Pintura Adapter
   "image.noPreview": "Kuvan esikatselu ei saatavilla",

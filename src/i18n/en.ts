@@ -357,7 +357,7 @@ const en = {
   "settings.onlyofficeUrlLabel": "ONLYOFFICE server URL",
   "settings.onlyofficeUrlPlaceholder": "https://onlyoffice.yourdomain.com",
   "settings.onlyofficeJwtLabel": "ONLYOFFICE JWT secret",
-  "settings.onlyofficeJwtPlaceholder": "Leave blank to use built-in default",
+  "settings.onlyofficeJwtPlaceholder": "Paste the JWT secret from your ONLYOFFICE server",
   "settings.emailSyncCountLabel": "Emails to sync per provider",
   "settings.save": "Save Settings",
   "settings.saved": "Settings saved",
@@ -594,6 +594,7 @@ const en = {
   "office.bridgeMissing": "ONLYOFFICE launch bridge missing",
   "office.launching": "Launching ONLYOFFICE...",
   "office.saveMessage": "Use in-editor save in ONLYOFFICE",
+  "onlyoffice.secretMissing": "ONLYOFFICE isn't configured — add the JWT secret in Settings.",
 
   // Image/Pintura Adapter
   "image.noPreview": "No image preview available",
