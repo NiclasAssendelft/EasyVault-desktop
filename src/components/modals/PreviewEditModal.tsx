@@ -9,6 +9,7 @@ import {
   fileKindFromItem, asString, toAdapterItem, getPreviewUrlForItem, formatRelativeTime, type PreviewKind,
 } from "../../services/helpers";
 import type { DesktopItem } from "../../services/helpers";
+import { resolveFreshFileUrl } from "../../services/fileOps";
 import {
   callDesktopSave, downloadFile, uploadFileWithToken, checkoutFile, listVersions, createNewVersion, sha256Hex,
 } from "../../api";
@@ -145,7 +146,7 @@ export default function PreviewEditModal() {
   const translatable = isTranslatable(realKind, item);
 
   async function handleOpenNative() {
-    const previewUrl = getPreviewUrlForItem(item!);
+    const previewUrl = await resolveFreshFileUrl(item!);
     if (!previewUrl) { setStatusText(t("previewEdit.noFileUrl")); return; }
     try {
       setStatusText(t("fileAction.downloading"));

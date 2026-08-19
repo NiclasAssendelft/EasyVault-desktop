@@ -1,4 +1,4 @@
-import { uploadFileWithToken } from "../api";
+import { entityGet, uploadFileWithToken } from "../api";
 import { getPreferredUploadToken } from "../storage";
 import { useFilesStore } from "../stores/filesStore";
 import { useAuthStore } from "../stores/authStore";
@@ -6,7 +6,29 @@ import { useUiStore } from "../stores/uiStore";
 import { useSyncStore } from "../stores/syncStore";
 import { safeEntityCreate, canUseRemoteData } from "./entityService";
 import { refreshAccessScope, syncRemoteDelta, refreshFilesFromRemote } from "./deltaSyncService";
-import { normalizeItem, extOf, asString, asArray, asBool, type FileItemType } from "./helpers";
+import { normalizeItem, extOf, asString, asArray, asBool, getPreviewUrlForItem, type FileItemType, type DesktopItem } from "./helpers";
+
+/**
+ * Resolve the current download URL for an item by re-reading vault_items.
+ * ONLYOFFICE saves update stored_file_url out-of-band (the desktop client is
+ * not involved), and every save writes a NEW storage object while the old one
+ * stays alive — so a cached URL silently serves pre-edit bytes instead of
+ * failing. The cached value is only a fallback for offline/transient failures.
+ */
+export async function resolveFreshFileUrl(item: DesktopItem): Promise<string> {
+  const cached = getPreviewUrlForItem(item);
+  try {
+    const row = await entityGet<Record<string, unknown>>("VaultItem", item.id);
+    const fresh = asString(row.stored_file_url);
+    if (fresh && fresh !== cached) {
+      useFilesStore.getState().updateItem(item.id, { storedFileUrl: fresh });
+      useFilesStore.getState().persist();
+    }
+    return fresh || cached;
+  } catch {
+    return cached;
+  }
+}
 
 export async function uploadSelectedFilesToFolder(targetFolderId: string, preSuppliedFiles?: File[]): Promise<void> {
   // Check auth

@@ -9,7 +9,8 @@ import { useSyncStore } from "../../stores/syncStore";
 import { getSavedEmail } from "../../storage";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
-import { fileKindFromItem, asString, getPreviewUrlForItem, toDisplayName } from "../../services/helpers";
+import { fileKindFromItem, asString, toDisplayName } from "../../services/helpers";
+import { resolveFreshFileUrl } from "../../services/fileOps";
 import { invokeEdgeFunction } from "../../api";
 import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
@@ -60,7 +61,7 @@ export default function FileActionModal() {
 
   async function handleOpenNative() {
     if (!item) return;
-    const previewUrl = getPreviewUrlForItem(item);
+    const previewUrl = await resolveFreshFileUrl(item);
     if (!previewUrl) { setStatus(t("fileAction.noFileUrl")); return; }
     try {
       setStatus(t("fileAction.downloading"));
