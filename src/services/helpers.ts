@@ -1,4 +1,6 @@
 import type { AdapterItem } from "../editors/types";
+import { t } from "../i18n";
+import type { TKey } from "../i18n";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -52,6 +54,28 @@ export interface DesktopItem {
   spaceId?: string;
   createdBy?: string;
   openedAt?: string;
+  /**
+   * Live ONLYOFFICE co-authors, maintained server-side by the status-1
+   * callback (`vault_items.editing_users`). Rides along with delta sync.
+   */
+  editingUsers: string[];
+  /** When editing_users was last written. Empty = unknown age (old backend). */
+  editingUsersAt: string;
+  /** Exclusive lock holder for the native-open path (`vault_items.locked_by`). */
+  lockedBy: string;
+  /** ISO timestamp the exclusive lock was taken (`vault_items.locked_at`). */
+  lockedAt: string;
+}
+
+/**
+ * Raw PostgREST spellings `normalizeItem` also accepts, so a caller can hand
+ * over a server row untouched instead of hand-mapping every column.
+ */
+interface RawItemFields {
+  editing_users?: unknown;
+  editing_users_at?: unknown;
+  locked_by?: unknown;
+  locked_at?: unknown;
 }
 
 export type PreviewKind = "note" | "link" | "image" | "pdf" | "office" | "other";
@@ -106,7 +130,7 @@ export function normalizeFolder(input: Partial<DesktopFolder>): DesktopFolder {
   };
 }
 
-export function normalizeItem(input: Partial<DesktopItem>): DesktopItem {
+export function normalizeItem(input: Partial<DesktopItem> & RawItemFields): DesktopItem {
   return {
     id: input.id || crypto.randomUUID(),
     title: input.title || "Untitled item",
@@ -128,6 +152,12 @@ export function normalizeItem(input: Partial<DesktopItem>): DesktopItem {
     contentText: input.contentText || "",
     spaceId: input.spaceId || "",
     createdBy: input.createdBy || "",
+    // Accept both the camelCase app shape and the raw PostgREST column names —
+    // these three arrive from the server and used to be dropped on the floor.
+    editingUsers: input.editingUsers ? asArray(input.editingUsers) : asArray(input.editing_users),
+    editingUsersAt: asString(input.editingUsersAt) || asString(input.editing_users_at),
+    lockedBy: input.lockedBy || asString(input.locked_by),
+    lockedAt: input.lockedAt || asString(input.locked_at),
   };
 }
 
@@ -231,6 +261,147 @@ export function toDisplayName(email: string): string {
     .replace(/[._-]/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim() || "User";
+}
+
+// ─── Co-editing presence ─────────────────────────────────────────────────────
+
+/**
+ * One live co-author of a document. `id` is whatever the server stored in
+ * `editing_users`; ONLYOFFICE reports the `editorConfig.user.id` values it was
+ * handed, so that is an email today but could become an opaque hash. `name` is
+ * `""` when the id cannot be turned into something a human recognizes — such a
+ * participant still counts toward presence, it just has no name or initials.
+ */
+export interface EditorPresence {
+  id: string;
+  name: string;
+}
+
+/** A long run of hex with no separators is an opaque id, not a person. */
+const OPAQUE_ID_RE = /^[0-9a-f]{16,}$/i;
+
+/** Best-effort human name for an `editing_users` entry; `""` if it is opaque. */
+export function editorDisplayName(entry: string): string {
+  const raw = entry.trim();
+  if (!raw) return "";
+  if (raw.includes("@")) return toDisplayName(raw);
+  if (OPAQUE_ID_RE.test(raw) || raw.length > 24) return "";
+  return toDisplayName(raw);
+}
+
+/**
+ * Live co-authors of `item`, **current user excluded**, deduped.
+ *
+ * Presence answers "who *else* is in this document right now" — you already
+ * know you are there, and a solo editor reading "1 person is editing" is pure
+ * noise. Every surface (file row, preview modal) uses this one exclusion so the
+ * avatar stack and the count never disagree.
+ */
+/**
+ * Presence older than this is ignored. A crashed document server or a dropped
+ * network never sends the disconnect callback, so editing_users can stay
+ * non-empty forever. Note the rule is the OPPOSITE of a stale lock: unknown
+ * age (no timestamp — an older backend) means IGNORE, because a wrongly-shown
+ * avatar is noise while a wrongly-ignored lock costs a file.
+ */
+export const PRESENCE_STALE_MS = 30 * 60 * 1000;
+
+export function presenceEditors(item: DesktopItem, me: string): EditorPresence[] {
+  const at = Date.parse(item.editingUsersAt || "");
+  if (!Number.isFinite(at) || Date.now() - at >= PRESENCE_STALE_MS) return [];
+  const mine = me.trim().toLowerCase();
+  const seen = new Set<string>();
+  const editors: EditorPresence[] = [];
+  for (const entry of item.editingUsers || []) {
+    const id = (entry || "").trim();
+    if (!id) continue;
+    const key = id.toLowerCase();
+    if (key === mine || seen.has(key)) continue;
+    seen.add(key);
+    editors.push({ id, name: editorDisplayName(id) });
+  }
+  // Named participants lead, so the first avatar is the name the sentence uses.
+  return [...editors.filter((e) => e.name), ...editors.filter((e) => !e.name)];
+}
+
+export interface PresenceLabel {
+  key: TKey;
+  vars: Record<string, string | number>;
+}
+
+/**
+ * Translation key + vars for the presence sentence. Returns the key rather than
+ * the string so each caller renders through its own `useT()` and re-renders on
+ * a locale switch. `null` when nobody else is in the document.
+ */
+export function presenceLabel(editors: EditorPresence[]): PresenceLabel | null {
+  if (editors.length === 0) return null;
+  const named = editors.find((e) => e.name);
+  if (!named) return { key: "presence.anonymous", vars: { count: editors.length } };
+  if (editors.length === 1) return { key: "presence.editing", vars: { name: named.name } };
+  return { key: "presence.editingWithOthers", vars: { name: named.name, count: editors.length - 1 } };
+}
+
+// ─── Exclusive locks (native-open path) ──────────────────────────────────────
+
+/**
+ * A lock older than this is treated as abandoned, and the open proceeds.
+ * 4 hours mirrors `file-checkout`'s own `edit_sessions.expires_at` window, so a
+ * client never takes over a lock the backend still considers alive.
+ */
+export const LOCK_STALE_MS = 4 * 60 * 60 * 1000;
+
+export interface LockInfo {
+  lockedBy: string;
+  lockedAt: string;
+}
+
+/** Unknown or unparseable age counts as live — never take over blind. */
+export function isLockStale(lockedAt: string, nowMs: number = Date.now()): boolean {
+  if (!lockedAt) return false;
+  const taken = new Date(lockedAt).getTime();
+  if (Number.isNaN(taken)) return false;
+  return nowMs - taken >= LOCK_STALE_MS;
+}
+
+/**
+ * Pull the lock holder out of a `file-checkout` 409. The edge function answers
+ * `{error, locked_by, locked_at}` and `api.ts`'s `checkoutFile` stringifies that
+ * body into the `Error` message — so the identity survives, but only as text
+ * inside the message. Returns `null` when the error is not a lock conflict.
+ */
+export function parseLockConflict(err: unknown): LockInfo | null {
+  const msg = String(err);
+  if (!msg.includes("(409)")) return null;
+  const start = msg.indexOf("{");
+  if (start < 0) return { lockedBy: "", lockedAt: "" };
+  try {
+    const body = JSON.parse(msg.slice(start)) as Record<string, unknown>;
+    return { lockedBy: asString(body.locked_by), lockedAt: asString(body.locked_at) };
+  } catch {
+    return { lockedBy: "", lockedAt: "" };
+  }
+}
+
+/**
+ * Display name for a lock holder. Falls back to a neutral "someone" rather than
+ * blaming the system — the whole point of the lock copy rewrite.
+ */
+export function lockHolderName(lockedBy: string): string {
+  return lockedBy ? toDisplayName(lockedBy) : t("lock.someone");
+}
+
+/** 409 body first, the item's own delta-synced columns as the fallback source. */
+export function resolveLockInfo(
+  conflict: LockInfo | null,
+  fileId: string,
+  items: readonly DesktopItem[],
+): LockInfo {
+  const cached = items.find((i) => i.id === fileId);
+  return {
+    lockedBy: conflict?.lockedBy || cached?.lockedBy || "",
+    lockedAt: conflict?.lockedAt || cached?.lockedAt || "",
+  };
 }
 
 export function toAdapterItem(item: DesktopItem): AdapterItem {

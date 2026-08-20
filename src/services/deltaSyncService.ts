@@ -183,6 +183,13 @@ async function refreshFilesFromRemoteInner(): Promise<void> {
           contentText: asString(row.content_text),
           spaceId: asString(row.space_id),
           createdBy: asString(row.created_by),
+          // Co-editing presence + lock state. This mapper hand-picks columns
+          // rather than spreading the row, so anything omitted here is silently
+          // dropped before it reaches the UI.
+          editingUsers: asArray(row.editing_users),
+          editingUsersAt: asString(row.editing_users_at),
+          lockedBy: asString(row.locked_by),
+          lockedAt: asString(row.locked_at),
         })
       );
 
@@ -479,6 +486,12 @@ async function syncRemoteDeltaInner(): Promise<void> {
             contentText: asString(row.content_text),
             spaceId: asString(row.space_id),
             createdBy: asString(row.created_by),
+            // Presence/lock — same hand-picked-columns caveat as the full
+            // refresh above; the 15s poll is what makes presence feel live.
+            editingUsers: asArray(row.editing_users),
+          editingUsersAt: asString(row.editing_users_at),
+            lockedBy: asString(row.locked_by),
+            lockedAt: asString(row.locked_at),
           });
           const exists = useFilesStore.getState().items.some((i) => i.id === id);
           if (exists) useFilesStore.getState().updateItem(id, item);

@@ -1,11 +1,16 @@
-import type { DesktopItem } from "../../services/helpers";
-import { formatRelativeTime } from "../../services/helpers";
+import type { DesktopItem, EditorPresence } from "../../services/helpers";
+import { formatRelativeTime, presenceEditors, presenceLabel } from "../../services/helpers";
+// avatarColor/initials live with the workspace UI; imported rather than copied
+// so every avatar in the app keeps the same palette and initial rules.
+import { avatarColor, currentUserEmail, initials } from "../tabs/workspaces/workspaceHelpers";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { useT } from "../../i18n";
 import { IconStar } from "../icons";
 import RowMenu from "../RowMenu";
+
+const NO_EDITORS: EditorPresence[] = [];
 
 interface Props {
   item: DesktopItem;
@@ -79,6 +84,13 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
   const extLabel = fileExtLabel(item);
   const t = useT();
 
+  // Live co-editors, current user excluded (see presenceEditors). Guarded so
+  // the common "nobody is editing" row does no work at all — this renders once
+  // per file in a list that can run to hundreds of rows.
+  const editors = item.editingUsers.length > 0 ? presenceEditors(item, currentUserEmail()) : NO_EDITORS;
+  const presence = presenceLabel(editors);
+  const presenceText = presence ? t(presence.key, presence.vars) : "";
+
   return (
     <article className={`file-row group${selected ? " file-row-selected" : ""}`} onClick={() => {
       if (selectMode && onToggleSelect) { onToggleSelect(item.id); return; }
@@ -112,6 +124,25 @@ export default function ItemRow({ item, selectMode, selected, onToggleSelect }: 
             {(item.openedAt || item.createdAtIso) ? formatRelativeTime(item.openedAt || item.createdAtIso) : ""}
           </p>
           {extLabel && <span className="file-ext-badge">{extLabel}</span>}
+          {editors.length > 0 && (
+            <span className="presence-stack" role="img" aria-label={presenceText} title={presenceText}>
+              <span className="presence-dot" aria-hidden="true" />
+              <span className="presence-avatars">
+                {editors.slice(0, 3).map((e) => (
+                  <span
+                    key={e.id}
+                    className={`presence-avatar${e.name ? "" : " presence-avatar-anon"}`}
+                    style={e.name ? { background: avatarColor(e.name) } : undefined}
+                  >
+                    {e.name ? initials(e.name) : "?"}
+                  </span>
+                ))}
+                {editors.length > 3 && (
+                  <span className="presence-avatar presence-avatar-more">+{editors.length - 3}</span>
+                )}
+              </span>
+            </span>
+          )}
         </div>
       </div>
       <RowMenu

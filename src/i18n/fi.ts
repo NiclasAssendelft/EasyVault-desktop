@@ -587,12 +587,31 @@ const fi: Record<keyof typeof en, string> = {
   "pdf.savingWorkspace": "Tallennetaan työtilaan...",
   "pdf.openingEditor": "Avataan PDF-editorissasi...",
   "pdf.editing": "Muokataan: {{title}} — muutokset synkronoituvat automaattisesti kun tallennat editorissa",
-  "pdf.readOnly": "Avattu: {{title}} — vain luku (tiedostolukitus ei saatavilla)",
+  "pdf.editingTakeover": "Muokataan: {{title}} — käyttäjän {{name}} unohtunut lukitus otettiin haltuun",
+  "pdf.readOnly": "Avattu: {{title}} — vain luku (uloskirjaus ei saatavilla)",
+  "pdf.lockedReadOnly": "{{name}} on lukinnut tiedoston ({{time}}) — avattu vain luku -tilassa. Muutoksesi eivät synkronoidu ennen kuin tiedosto vapautuu.",
+  "pdf.lockTakenOver": "Käyttäjän {{name}} lukitus vaikuttaa unohtuneelta ({{time}}) — avataan muokattavaksi",
   "pdf.autoSyncActive": "PDF avattu ulkoisessa editorissa — automaattinen synkronointi aktiivinen",
+  "pdf.autoSyncTakeover": "PDF avattu ulkoisessa editorissa — automaattinen synkronointi aktiivinen, käyttäjän {{name}} unohtunut lukitus otettiin haltuun",
   "pdf.readOnlyMode": "PDF avattu ulkoisessa editorissa — vain luku -tila (uloskirjaus ei saatavilla)",
+  "pdf.lockedReadOnlyStatus": "PDF avattu vain luku -tilassa — {{name}} on lukinnut tiedoston",
   "pdf.openFailed": "Avaaminen epäonnistui: {{error}}",
   "pdf.failedGeneric": "Epäonnistui: {{error}}",
   "pdf.autoSyncMessage": "Muutokset synkronoituvat automaattisesti ulkoisesta PDF-editoristasi. Tallenna editorissa synkronoidaksesi.",
+
+  // Co-editing presence (current user is always excluded from the count)
+  "presence.editing": "{{name}} muokkaa parhaillaan",
+  "presence.editingWithOthers_one": "{{name}} ja {{count}} muu muokkaavat",
+  "presence.editingWithOthers_other": "{{name}} ja {{count}} muuta muokkaavat",
+  "presence.anonymous_one": "{{count}} henkilö muokkaa",
+  "presence.anonymous_other": "{{count}} henkilöä muokkaa",
+
+  // Exclusive file locks (native-app editing)
+  "lock.someone": "joku",
+  "lock.timeUnknown": "aika tuntematon",
+  "lock.lockedBySince": "Lukinnut {{name}} · {{time}}",
+  "lock.saveBlocked": "Tallennus ei onnistu — {{name}} pitää tiedostoa auki. Yritä uudelleen, kun tiedosto suljetaan.",
+  "lock.takingOver": "Käyttäjän {{name}} lukitus vaikuttaa unohtuneelta — otetaan haltuun",
 
   // Office/ONLYOFFICE Adapter
   "office.previewMsg": "Office-tiedostot avataan sovelluksen sisäisessä ONLYOFFICE-editorissa.",

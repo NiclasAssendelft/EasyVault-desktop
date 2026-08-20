@@ -587,12 +587,31 @@ const en = {
   "pdf.savingWorkspace": "Saving to workspace...",
   "pdf.openingEditor": "Opening in your PDF editor...",
   "pdf.editing": "Editing: {{title}} — changes auto-sync when you save in your editor",
-  "pdf.readOnly": "Opened: {{title}} — read-only (file lock unavailable)",
+  "pdf.editingTakeover": "Editing: {{title}} — took over an abandoned lock from {{name}}",
+  "pdf.readOnly": "Opened: {{title}} — read-only (checkout unavailable)",
+  "pdf.lockedReadOnly": "Locked by {{name}} ({{time}}) — opened read-only. Your changes won't sync until they close the file.",
+  "pdf.lockTakenOver": "{{name}}'s lock looks abandoned ({{time}}) — opening for editing",
   "pdf.autoSyncActive": "PDF opened in native editor — auto-sync active",
+  "pdf.autoSyncTakeover": "PDF opened in native editor — auto-sync active, took over {{name}}'s abandoned lock",
   "pdf.readOnlyMode": "PDF opened in native editor — read-only mode (checkout unavailable)",
+  "pdf.lockedReadOnlyStatus": "PDF opened read-only — locked by {{name}}",
   "pdf.openFailed": "Open failed: {{error}}",
   "pdf.failedGeneric": "Failed: {{error}}",
   "pdf.autoSyncMessage": "Changes are auto-synced from your native PDF editor. Save in your editor to sync.",
+
+  // Co-editing presence (current user is always excluded from the count)
+  "presence.editing": "{{name}} is editing",
+  "presence.editingWithOthers_one": "{{name}} and {{count}} other are editing",
+  "presence.editingWithOthers_other": "{{name}} and {{count}} others are editing",
+  "presence.anonymous_one": "{{count}} person is editing",
+  "presence.anonymous_other": "{{count}} people are editing",
+
+  // Exclusive file locks (native-app editing)
+  "lock.someone": "someone",
+  "lock.timeUnknown": "time unknown",
+  "lock.lockedBySince": "Locked by {{name}} · {{time}}",
+  "lock.saveBlocked": "Can't save — {{name}} has this file open. Try again once they close it.",
+  "lock.takingOver": "{{name}}'s lock looks abandoned — taking over",
 
   // Office/ONLYOFFICE Adapter
   "office.previewMsg": "Office files open in the in-app ONLYOFFICE editor.",

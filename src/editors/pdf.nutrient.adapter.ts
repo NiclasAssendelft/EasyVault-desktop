@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
+import { formatRelativeTime, lockHolderName } from "../services/helpers";
 import { t } from "../i18n";
 
 // Lazy-load PDF.js to keep the main bundle small
@@ -166,10 +167,31 @@ export const pdfNutrientAdapter: EditorAdapter = {
           const { tryCheckout, startAutoSync } = await import("./pdf.native.bridge");
 
           infoEl.textContent = t("pdf.checkingOut");
-          const checkout = await tryCheckout(ctx.item.id);
+          const outcome = await tryCheckout(ctx.item.id);
+
+          // A live lock is the only outcome that forces read-only: a fresh
+          // checkout edits under its own session, an abandoned lock is taken
+          // over with an empty session id (file-versions accepts that and
+          // clears the stale lock as it commits).
+          const holder = outcome.status === "locked" || outcome.status === "takeover"
+            ? lockHolderName(outcome.lockedBy)
+            : "";
+          // A takeover always has a parseable timestamp (that is what made it
+          // stale); a live lock may not, hence the explicit unknown wording.
+          const lockAge = outcome.status === "locked" || outcome.status === "takeover"
+            ? formatRelativeTime(outcome.lockedAt) || t("lock.timeUnknown")
+            : "";
+
+          if (outcome.status === "takeover") {
+            ctx.setStatus(t("pdf.lockTakenOver", { name: holder, time: lockAge }));
+          } else if (outcome.status === "locked") {
+            ctx.setStatus(t("lock.lockedBySince", { name: holder, time: lockAge }));
+          }
 
           infoEl.textContent = t("pdf.downloading");
-          const downloadUrl = checkout?.download_url || ctx.getPreviewUrl(ctx.item);
+          const downloadUrl = outcome.status === "ok"
+            ? outcome.checkout.download_url
+            : ctx.getPreviewUrl(ctx.item);
           if (!downloadUrl) throw new Error("No file URL available");
 
           infoEl.textContent = t("pdf.savingWorkspace");
@@ -180,13 +202,21 @@ export const pdfNutrientAdapter: EditorAdapter = {
           infoEl.textContent = t("pdf.openingEditor");
           await openPath(savedPath);
 
-          if (checkout) {
+          if (outcome.status === "ok" || outcome.status === "takeover") {
             await startAutoSync({
               fileId: ctx.item.id, filename: ctx.item.title, localPath: savedPath,
-              editSessionId: checkout.edit_session_id,
+              editSessionId: outcome.status === "ok" ? outcome.checkout.edit_session_id : "",
             }, ctx.setStatus);
-            infoEl.textContent = t("pdf.editing", { title: ctx.item.title });
-            ctx.setStatus(t("pdf.autoSyncActive"));
+            infoEl.textContent = outcome.status === "ok"
+              ? t("pdf.editing", { title: ctx.item.title })
+              : t("pdf.editingTakeover", { title: ctx.item.title, name: holder });
+            ctx.setStatus(outcome.status === "ok"
+              ? t("pdf.autoSyncActive")
+              : t("pdf.autoSyncTakeover", { name: holder }));
+          } else if (outcome.status === "locked") {
+            infoEl.textContent = t("pdf.lockedReadOnly", { name: holder, time: lockAge });
+            ctx.setStatus(t("pdf.lockedReadOnlyStatus", { name: holder }));
+            launchBtn.disabled = false;
           } else {
             infoEl.textContent = t("pdf.readOnly", { title: ctx.item.title });
             ctx.setStatus(t("pdf.readOnlyMode"));

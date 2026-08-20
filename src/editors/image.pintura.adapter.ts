@@ -1,8 +1,38 @@
 import type { AdapterRenderContext, AdapterSaveContext, AdapterSaveResult, EditorAdapter } from "./types";
+import { isLockStale, lockHolderName, parseLockConflict, resolveLockInfo } from "../services/helpers";
+import { useFilesStore } from "../stores/filesStore";
 import { t } from "../i18n";
 
 function num(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+type Checkout = { download_url: string; edit_session_id: string };
+
+/**
+ * Check the image out for saving. A 409 used to surface as a raw
+ * `Checkout failed (409): {…}` blob; now it either names the holder or, when
+ * the lock is older than `LOCK_STALE_MS`, is taken over — saving against the
+ * stored copy with an empty edit session, which `file-versions` accepts and
+ * which clears the abandoned lock as it commits.
+ */
+async function checkoutForSave(
+  ctx: AdapterSaveContext,
+  uploadToken: string,
+): Promise<{ checkout: Checkout } | { blocked: AdapterSaveResult }> {
+  try {
+    return { checkout: await ctx.checkoutFile(ctx.item.id, uploadToken) };
+  } catch (err) {
+    const conflict = parseLockConflict(err);
+    if (!conflict) throw err;
+    const { lockedBy, lockedAt } = resolveLockInfo(conflict, ctx.item.id, useFilesStore.getState().items);
+    const name = lockHolderName(lockedBy);
+    if (!isLockStale(lockedAt)) {
+      return { blocked: { ok: false, message: t("lock.saveBlocked", { name }) } };
+    }
+    ctx.setStatus(t("lock.takingOver", { name }));
+    return { checkout: { download_url: ctx.item.storedFileUrl || "", edit_session_id: "" } };
+  }
 }
 
 export const imagePinturaAdapter: EditorAdapter = {
@@ -69,7 +99,10 @@ export const imagePinturaAdapter: EditorAdapter = {
       return { ok: false, message: t("image.missingToken") };
     }
 
-    const checkout = await ctx.checkoutFile(ctx.item.id, uploadToken);
+    const outcome = await checkoutForSave(ctx, uploadToken);
+    if ("blocked" in outcome) return outcome.blocked;
+    const { checkout } = outcome;
+
     const originalBytes = await ctx.downloadFile(checkout.download_url);
     const blob = new Blob([originalBytes], { type: "image/png" });
     const bitmap = await createImageBitmap(blob);

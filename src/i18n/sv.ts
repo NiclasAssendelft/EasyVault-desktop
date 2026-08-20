@@ -587,12 +587,31 @@ const sv: Record<keyof typeof en, string> = {
   "pdf.savingWorkspace": "Sparar till arbetsytan...",
   "pdf.openingEditor": "Öppnar i din PDF-redigerare...",
   "pdf.editing": "Redigerar: {{title}} — ändringar synkas automatiskt när du sparar i redigeraren",
-  "pdf.readOnly": "Öppnad: {{title}} — skrivskyddad (fillås ej tillgängligt)",
+  "pdf.editingTakeover": "Redigerar: {{title}} — tog över ett övergivet lås från {{name}}",
+  "pdf.readOnly": "Öppnad: {{title}} — skrivskyddad (utcheckning ej tillgänglig)",
+  "pdf.lockedReadOnly": "Låst av {{name}} ({{time}}) — öppnad skrivskyddad. Dina ändringar synkas inte förrän filen släpps.",
+  "pdf.lockTakenOver": "Låset från {{name}} verkar övergivet ({{time}}) — öppnar för redigering",
   "pdf.autoSyncActive": "PDF öppnad i extern redigerare — autosynk aktiv",
+  "pdf.autoSyncTakeover": "PDF öppnad i extern redigerare — autosynk aktiv, tog över ett övergivet lås från {{name}}",
   "pdf.readOnlyMode": "PDF öppnad i extern redigerare — skrivskyddat läge (utcheckning ej tillgänglig)",
+  "pdf.lockedReadOnlyStatus": "PDF öppnad skrivskyddad — låst av {{name}}",
   "pdf.openFailed": "Öppning misslyckades: {{error}}",
   "pdf.failedGeneric": "Misslyckades: {{error}}",
   "pdf.autoSyncMessage": "Ändringar synkas automatiskt från din externa PDF-redigerare. Spara i redigeraren för att synka.",
+
+  // Co-editing presence (current user is always excluded from the count)
+  "presence.editing": "{{name}} redigerar",
+  "presence.editingWithOthers_one": "{{name}} och {{count}} till redigerar",
+  "presence.editingWithOthers_other": "{{name}} och {{count}} andra redigerar",
+  "presence.anonymous_one": "{{count}} person redigerar",
+  "presence.anonymous_other": "{{count}} personer redigerar",
+
+  // Exclusive file locks (native-app editing)
+  "lock.someone": "någon",
+  "lock.timeUnknown": "okänd tid",
+  "lock.lockedBySince": "Låst av {{name}} · {{time}}",
+  "lock.saveBlocked": "Kan inte spara — {{name}} har filen öppen. Försök igen när filen har stängts.",
+  "lock.takingOver": "Låset från {{name}} verkar övergivet — tar över",
 
   // Office/ONLYOFFICE Adapter
   "office.previewMsg": "Office-filer öppnas i den inbyggda ONLYOFFICE-redigeraren.",

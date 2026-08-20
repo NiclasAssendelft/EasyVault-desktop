@@ -318,6 +318,10 @@ struct OnlyofficeRelayStats {
 #[derive(Clone)]
 struct RelayAuth {
     token: String,
+    /// ONLYOFFICE outbox-JWT secret, when the frontend has one to hand over.
+    /// Optional because the shipped app no longer bakes a secret in; see
+    /// onlyoffice_jwt_secret() for the full source list.
+    onlyoffice_jwt_secret: Option<String>,
 }
 
 fn relay_auth_store() -> &'static Mutex<Option<RelayAuth>> {
@@ -330,16 +334,28 @@ fn get_relay_auth() -> Option<RelayAuth> {
 }
 
 #[tauri::command]
-fn set_onlyoffice_relay_auth(token: String, _api_key: Option<String>) -> Result<(), String> {
+fn set_onlyoffice_relay_auth(
+    token: String,
+    _api_key: Option<String>,
+    onlyoffice_jwt_secret: Option<String>,
+) -> Result<(), String> {
     let clean_token = token.trim().to_string();
     if clean_token.is_empty() {
         return Err("token is required".to_string());
     }
+    let clean_secret = onlyoffice_jwt_secret
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     let mut guard = relay_auth_store()
         .lock()
         .map_err(|_| "relay auth lock poisoned".to_string())?;
+    // Merge rather than clobber: the Supabase token is re-pushed on every relay
+    // setup / token refresh, and a call that omits the secret must not silently
+    // disarm callback verification for the rest of the session.
+    let previous_secret = guard.as_ref().and_then(|a| a.onlyoffice_jwt_secret.clone());
     *guard = Some(RelayAuth {
         token: clean_token,
+        onlyoffice_jwt_secret: clean_secret.or(previous_secret),
     });
     Ok(())
 }
@@ -383,10 +399,411 @@ fn relay_stats_store() -> &'static Mutex<OnlyofficeRelayStats> {
     STORE.get_or_init(|| Mutex::new(OnlyofficeRelayStats::default()))
 }
 
-fn parse_callback_status(v: &serde_json::Value) -> Option<i64> {
+/// Lenient JSON → i64. ONLYOFFICE has been observed sending numeric fields as
+/// integers, floats and quoted strings depending on version and hop.
+fn json_i64(v: &serde_json::Value) -> Option<i64> {
     v.as_i64()
         .or_else(|| v.as_f64().map(|n| n as i64))
         .or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+}
+
+fn parse_callback_status(v: &serde_json::Value) -> Option<i64> {
+    json_i64(v)
+}
+
+// ---------------------------------------------------------------------------
+// ONLYOFFICE outbox-JWT verification
+// ---------------------------------------------------------------------------
+//
+// The relay's /onlyoffice-callback endpoint acts on saves: it downloads the
+// edited bytes, chunk-uploads them to Supabase and commits a new version of a
+// vault file using the signed-in user's token. Binding loopback is NOT an
+// authentication boundary — any page open in the user's browser can POST a
+// text/plain body to http://localhost:17171/onlyoffice-callback as a
+// CORS-simple request, and with only the file UUID it could replace a vault
+// document with content of its choosing.
+//
+// So every callback the relay ACTS on must carry ONLYOFFICE's own outbox JWT,
+// HMAC-SHA256 over ONLYOFFICE_JWT_SECRET — the same guarantee the
+// onlyoffice-callback edge function enforces server-side, ported here verbatim
+// in intent: verify, then read the acted-on fields out of the VERIFIED claims.
+//
+// HMAC is implemented directly on sha2 (RFC 2104 ipad/opad) rather than pulling
+// in a new crate; it is ~15 lines and covered by the RFC 4231 vectors below.
+
+/// Clock-skew allowance between the document server and this machine.
+const ONLYOFFICE_JWT_CLOCK_SKEW_SEC: i64 = 120;
+
+/// Hosts a callback `url` may resolve to for the relay to treat the save as
+/// local and handle it in-process. Compared for HOST EQUALITY, never substring:
+/// `http://evil.example/payload.docx?localhost` must not qualify, or the relay
+/// becomes an SSRF-driven arbitrary-file-replacement primitive.
+const LOCAL_CALLBACK_HOSTS: [&str; 4] = [
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "host.docker.internal",
+];
+
+/// HMAC-SHA256 (RFC 2104): H((K ^ opad) || H((K ^ ipad) || message)).
+/// Keys longer than the 64-byte SHA-256 block are hashed first; shorter keys
+/// are zero-padded to the block length.
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    const BLOCK_LEN: usize = 64;
+
+    let mut padded_key = [0u8; BLOCK_LEN];
+    if key.len() > BLOCK_LEN {
+        padded_key[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        padded_key[..key.len()].copy_from_slice(key);
+    }
+
+    let mut inner_pad = [0x36u8; BLOCK_LEN];
+    let mut outer_pad = [0x5cu8; BLOCK_LEN];
+    for i in 0..BLOCK_LEN {
+        inner_pad[i] ^= padded_key[i];
+        outer_pad[i] ^= padded_key[i];
+    }
+
+    let mut inner = Sha256::new();
+    inner.update(inner_pad);
+    inner.update(message);
+    let inner_digest = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(outer_pad);
+    outer.update(inner_digest);
+
+    let mut mac = [0u8; 32];
+    mac.copy_from_slice(&outer.finalize());
+    mac
+}
+
+/// Length-independent, data-independent comparison. `==` on slices
+/// short-circuits at the first differing byte, which leaks how much of a forged
+/// MAC was correct to anyone able to time the response.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// base64url (RFC 4648 §5) decode. Padding is tolerated but not required — JWT
+/// segments are unpadded. Standard-base64 `+` / `/` and whitespace are rejected
+/// rather than silently remapped: a token that is not base64url is not a token
+/// this verifier minted a signature over.
+fn b64url_decode(input: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() / 4 * 3 + 3);
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    for byte in input.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            b'=' => break,
+            _ => return None,
+        } as u32;
+        acc = (acc << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    // Leftover bits must be zero padding; anything else means the input was
+    // truncated mid-byte.
+    if bits > 0 && (acc & ((1u32 << bits) - 1)) != 0 {
+        return None;
+    }
+    Some(out)
+}
+
+/// Decode one base64url JWT segment into a JSON **object**. Arrays and scalars
+/// are rejected so downstream `.get(...)` lookups can never silently miss.
+fn decode_jwt_segment(segment: &str) -> Option<serde_json::Value> {
+    let bytes = b64url_decode(segment)?;
+    let value = serde_json::from_slice::<serde_json::Value>(&bytes).ok()?;
+    if value.is_object() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+/// Verify one HS256 JWT against the shared secret and return its claims.
+///
+/// Hardening notes:
+///  - `alg` is read from the header and REQUIRED to be HS256. Without that,
+///    `{"alg":"none"}` (empty signature) verifies trivially, and an RS256
+///    header invites key confusion.
+///  - The MAC comparison is constant-time (see constant_time_eq).
+///  - `exp`/`nbf` are enforced when present, with a small skew allowance. A
+///    token with no `exp` is still accepted: the secret is the security
+///    boundary, and document servers configured without `token.outbox.expires`
+///    legitimately omit it.
+fn verify_hs256(token: &str, secret: &str, now: i64) -> Option<serde_json::Value> {
+    let mut parts = token.trim().split('.');
+    let header_b64 = parts.next()?;
+    let payload_b64 = parts.next()?;
+    let signature_b64 = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    if header_b64.is_empty() || payload_b64.is_empty() || signature_b64.is_empty() {
+        return None;
+    }
+
+    let header = decode_jwt_segment(header_b64)?;
+    let alg = header.get("alg").and_then(|v| v.as_str())?;
+    if !alg.eq_ignore_ascii_case("HS256") {
+        return None;
+    }
+
+    let signature = b64url_decode(signature_b64)?;
+    let expected = hmac_sha256(
+        secret.as_bytes(),
+        format!("{header_b64}.{payload_b64}").as_bytes(),
+    );
+    if !constant_time_eq(&signature, &expected) {
+        return None;
+    }
+
+    let claims = decode_jwt_segment(payload_b64)?;
+    if let Some(exp) = claims.get("exp").and_then(json_i64) {
+        if exp + ONLYOFFICE_JWT_CLOCK_SKEW_SEC < now {
+            return None;
+        }
+    }
+    if let Some(nbf) = claims.get("nbf").and_then(json_i64) {
+        if nbf - ONLYOFFICE_JWT_CLOCK_SKEW_SEC > now {
+            return None;
+        }
+    }
+    Some(claims)
+}
+
+/// Unwrap the `{ "payload": { ...callback fields... } }` shape ONLYOFFICE uses
+/// for the header token. The body token carries the fields at the top level.
+fn unwrap_jwt_claims(claims: serde_json::Value) -> serde_json::Value {
+    if let Some(inner) = claims.get("payload") {
+        if inner.is_object() {
+            return inner.clone();
+        }
+    }
+    claims
+}
+
+/// Outcome of authenticating a relay callback.
+enum CallbackAuth {
+    /// Signature checked. Holds the SIGNED view of the callback — the only
+    /// object the relay may act on.
+    Verified(serde_json::Value),
+    /// No ONLYOFFICE secret reachable from this process (see
+    /// onlyoffice_jwt_secret): nothing can be verified, so nothing is trusted.
+    NoSecret,
+    /// Neither the configured header nor the body carried a token.
+    NoToken,
+    /// A token was present but no candidate verified.
+    Invalid,
+}
+
+impl CallbackAuth {
+    fn claims(&self) -> Option<&serde_json::Value> {
+        match self {
+            CallbackAuth::Verified(claims) => Some(claims),
+            _ => None,
+        }
+    }
+
+    fn reason(&self) -> &'static str {
+        match self {
+            CallbackAuth::Verified(_) => "verified",
+            CallbackAuth::NoSecret => "no ONLYOFFICE JWT secret configured on this device",
+            CallbackAuth::NoToken => "callback carried no ONLYOFFICE token",
+            CallbackAuth::Invalid => "ONLYOFFICE token failed verification",
+        }
+    }
+}
+
+/// Authenticate a callback and return its SIGNED body.
+///
+/// The returned claims — not the raw request body — are what the relay acts on.
+/// A signature only proves that *some* payload was minted by the document
+/// server; reading `url` / `key` / `status` out of the unsigned envelope would
+/// let anyone who captured one valid token replay it with a rewritten body and
+/// have EasyVault download an arbitrary file and commit it over a vault
+/// document. This mirrors verifyOnlyofficeToken() in the onlyoffice-callback
+/// edge function.
+///
+/// Both token locations are tried, because which one survives depends on the
+/// hop: the header may legitimately hold a NON-ONLYOFFICE token (the relay's
+/// own Supabase JWT fallback when proxying), while the body token is the real
+/// one — so a failure on the first candidate must not end the check.
+fn verify_onlyoffice_callback(
+    secret: Option<&str>,
+    header_token: Option<&str>,
+    body: &serde_json::Value,
+    now: i64,
+) -> CallbackAuth {
+    let secret = match secret {
+        Some(s) if !s.is_empty() => s,
+        _ => return CallbackAuth::NoSecret,
+    };
+
+    let mut candidates: Vec<&str> = Vec::new();
+    if let Some(token) = header_token.map(str::trim).filter(|t| !t.is_empty()) {
+        candidates.push(token);
+    }
+    if let Some(token) = body
+        .get("token")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        candidates.push(token);
+    }
+    if candidates.is_empty() {
+        return CallbackAuth::NoToken;
+    }
+
+    for candidate in candidates {
+        if let Some(claims) = verify_hs256(candidate, secret, now) {
+            return CallbackAuth::Verified(unwrap_jwt_claims(claims));
+        }
+    }
+    CallbackAuth::Invalid
+}
+
+/// The ONLYOFFICE outbox-JWT secret, if this process can reach one.
+///
+/// Sources, highest priority first:
+///  1. handed over by the frontend through `set_onlyoffice_relay_auth`
+///     (`onlyofficeJwtSecret`) — the Settings-tab value, once the frontend
+///     forwards it;
+///  2. `EASYVAULT_ONLYOFFICE_JWT_SECRET`;
+///  3. `ONLYOFFICE_JWT_SECRET` — the same name `ops/onlyoffice/.env` and both
+///     docker-compose files already use, so local docker dev only has to export
+///     the variable it already has.
+///
+/// `None` means callbacks cannot be authenticated, and the relay declines to
+/// act on them (fail closed).
+fn onlyoffice_jwt_secret() -> Option<String> {
+    if let Some(secret) = get_relay_auth().and_then(|auth| auth.onlyoffice_jwt_secret) {
+        return Some(secret);
+    }
+    for var in ["EASYVAULT_ONLYOFFICE_JWT_SECRET", "ONLYOFFICE_JWT_SECRET"] {
+        if let Some(value) = std::env::var(var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// Header carrying the outbox token — `token.outbox.header`, default
+/// `Authorization` (what both compose files configure).
+fn onlyoffice_jwt_header_name() -> String {
+    std::env::var("ONLYOFFICE_JWT_HEADER")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "Authorization".to_string())
+}
+
+/// Value prefix on that header — `token.outbox.prefix`, default `Bearer `.
+fn onlyoffice_jwt_header_prefix() -> String {
+    std::env::var("ONLYOFFICE_JWT_PREFIX").unwrap_or_else(|_| "Bearer ".to_string())
+}
+
+fn strip_token_prefix(value: &str, prefix: &str) -> String {
+    let trimmed = value.trim();
+    if !prefix.is_empty() {
+        // `get` (not slicing) because a prefix length can land mid-character.
+        if let Some(head) = trimmed.get(..prefix.len()) {
+            if head.eq_ignore_ascii_case(prefix) {
+                return trimmed[prefix.len()..].trim().to_string();
+            }
+        }
+    }
+    trimmed.to_string()
+}
+
+fn request_header_value(request: &tiny_http::Request, name: &str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
+        .map(|h| h.value.as_str().to_string())
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Host of an absolute http(s) URL: lowercased, userinfo/port/IPv6 brackets
+/// stripped, trailing dot removed. `None` for anything that is not an absolute
+/// http(s) URL — a relative path or a `file:` URL has no host we may class as
+/// loopback.
+fn url_host(url: &str) -> Option<String> {
+    let (scheme, rest) = url.trim().split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    // The authority ends at the first '/', '?' or '#'.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.is_empty() {
+        return None;
+    }
+    // `user:pass@host`. Split on the LAST '@': `http://a@b@evil.example/` has
+    // host `evil.example`, not `b`.
+    let host_port = match authority.rsplit_once('@') {
+        Some((_userinfo, host)) => host,
+        None => authority,
+    };
+    // IPv6 literals are bracketed: `[::1]:8080`.
+    let host = if let Some(after_bracket) = host_port.strip_prefix('[') {
+        after_bracket.split_once(']').map(|(h, _)| h)?
+    } else {
+        host_port.split(':').next().unwrap_or("")
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
+}
+
+/// Whether a callback `url` points at this machine. HOST EQUALITY — the old
+/// `url.contains("localhost")` test also accepted
+/// `http://evil.example/payload.docx?localhost`.
+fn is_local_callback_url(url: &str) -> bool {
+    match url_host(url) {
+        Some(host) => LOCAL_CALLBACK_HOSTS.contains(&host.as_str()),
+        None => false,
+    }
+}
+
+fn respond_json(request: tiny_http::Request, status: u16, body: &str) {
+    let mut response = Response::from_string(body).with_status_code(StatusCode(status));
+    if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
+        response = response.with_header(header);
+    }
+    let _ = request.respond(response);
 }
 
 fn infer_office_ext_from_callback_url(url: &str) -> &'static str {
@@ -954,22 +1371,57 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                 return;
             }
 
-            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
-                let status = json.get("status").and_then(parse_callback_status);
-                let key = json.get("key").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let callback_url = json.get("url").and_then(|v| v.as_str()).map(|s| s.to_string());
+            // ── Authenticate: nothing below acts on an unsigned callback ──
+            //
+            // A signature only proves that *some* payload was minted by the
+            // document server, so every field the relay acts on (status / url /
+            // key / users) is read out of the VERIFIED claims, never out of the
+            // raw envelope. Otherwise a captured token replayed with a rewritten
+            // body would still get an attacker's file committed over a vault
+            // document — the same reasoning as the onlyoffice-callback edge
+            // function.
+            let header_token = request_header_value(&request, &onlyoffice_jwt_header_name())
+                .map(|value| strip_token_prefix(&value, &onlyoffice_jwt_header_prefix()));
+            let secret = onlyoffice_jwt_secret();
+            let raw_json = serde_json::from_slice::<serde_json::Value>(&body).ok();
+            let auth = match raw_json.as_ref() {
+                Some(json) => verify_onlyoffice_callback(
+                    secret.as_deref(),
+                    header_token.as_deref(),
+                    json,
+                    unix_now(),
+                ),
+                None => CallbackAuth::NoToken,
+            };
+
+            if let Some(json) = raw_json.as_ref() {
+                // Diagnostics mirror the signed view when there is one. An
+                // unverified callback's fields are only ever echoed into stats
+                // or used to decide that this request must be REFUSED.
+                let view = auth.claims().unwrap_or(json);
+                let status = view.get("status").and_then(parse_callback_status);
+                let key = view
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let callback_url = view
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
                 if let Ok(mut stats) = relay_stats_store().lock() {
                     stats.callback_count = stats.callback_count.saturating_add(1);
                     stats.last_status = status;
-                    stats.last_key = key;
-                    stats.last_upstream_body = callback_url;
+                    stats.last_key = (!key.is_empty()).then(|| key.clone());
+                    stats.last_upstream_body =
+                        (!callback_url.is_empty()).then(|| callback_url.clone());
                     stats.last_error = None;
                 }
 
-                // Handle local ONLYOFFICE save callbacks end-to-end in relay.
-                if matches!(status, Some(2) | Some(6)) {
-                    let key = json.get("key").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                    let callback_url = json.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let is_save = matches!(status, Some(2) | Some(6));
+                if is_save {
                     if let Ok(mut stats) = relay_stats_store().lock() {
                         stats.last_save_status = status;
                         stats.last_save_key = Some(key.clone());
@@ -977,203 +1429,51 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                         stats.last_save_error = None;
                         stats.last_save_commit_method = None;
                     }
-                    if !key.is_empty() && !callback_url.is_empty() {
-                        let localish = callback_url.contains("localhost")
-                            || callback_url.contains("127.0.0.1")
-                            || callback_url.contains("host.docker.internal");
-                        if localish {
-                            let auth = match get_relay_auth() {
-                                Some(a) => a,
-                                None => {
-                                    if let Ok(mut stats) = relay_stats_store().lock() {
-                                        stats.last_error = Some("missing relay auth token".to_string());
-                                        stats.last_save_error =
-                                            Some("missing relay auth token".to_string());
-                                    }
-                                    let _ = request.respond(
-                                        Response::from_string(r#"{"error":1,"message":"missing relay auth"}"#)
-                                            .with_status_code(StatusCode(500)),
-                                    );
-                                    return;
-                                }
-                            };
+                }
 
-                            let users = json
-                                .get("users")
-                                .and_then(|v| v.as_array())
-                                .map(|arr| {
-                                    arr.iter()
-                                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                                        .collect::<Vec<String>>()
-                                })
-                                .unwrap_or_default();
-
-                            let fetch_url = callback_url.replace("host.docker.internal", "localhost");
-                            let download_res = client.get(&fetch_url).send();
-                            let bytes = match download_res {
-                                Ok(r) => match r.bytes() {
-                                    Ok(b) => b.to_vec(),
-                                    Err(e) => {
-                                        if let Ok(mut stats) = relay_stats_store().lock() {
-                                            stats.last_error = Some(format!("download bytes failed: {e}"));
-                                            stats.last_save_error =
-                                                Some(format!("download bytes failed: {e}"));
-                                        }
-                                        let _ = request.respond(
-                                            Response::from_string(r#"{"error":1,"message":"download bytes failed"}"#)
-                                                .with_status_code(StatusCode(502)),
-                                        );
-                                        return;
-                                    }
-                                },
-                                Err(e) => {
-                                    if let Ok(mut stats) = relay_stats_store().lock() {
-                                        stats.last_error = Some(format!("download failed: {e}"));
-                                        stats.last_save_error = Some(format!("download failed: {e}"));
-                                    }
-                                    let _ = request.respond(
-                                        Response::from_string(r#"{"error":1,"message":"download failed"}"#)
-                                            .with_status_code(StatusCode(502)),
-                                    );
-                                    return;
-                                }
-                            };
-
-                            let ext = infer_office_ext_from_callback_url(&callback_url);
-                            let filename = format!("onlyoffice_{}.{}", key, ext);
-                            let upload_url = match upload_bytes_to_storage(&client, &auth, &filename, &bytes) {
-                                Ok(url) => url,
-                                Err(err) => {
-                                    if let Ok(mut stats) = relay_stats_store().lock() {
-                                        stats.last_error = Some(err.clone());
-                                        stats.last_save_error = Some(err.clone());
-                                    }
-                                    let _ = request.respond(
-                                        Response::from_string(format!(r#"{{"error":1,"message":"{}"}}"#, err))
-                                            .with_status_code(StatusCode(502)),
-                                    );
-                                    return;
-                                }
-                            };
-
-                            let status_i64 = status.unwrap_or(6);
-                            if let Err(commit_err) = call_onlyoffice_commit(
-                                &client,
-                                &auth,
-                                &key,
-                                status_i64,
-                                &users,
-                                &upload_url,
-                                bytes.len(),
-                            ) {
-                                let file_id_guess = extract_file_id_from_key(&key).unwrap_or_default();
-                                let fallback_res = if file_id_guess.is_empty() {
-                                    // Some ONLYOFFICE callbacks (print/export) do not carry a vault file key.
-                                    // Acknowledge to prevent editor warning; skip version commit.
-                                    if let Ok(mut stats) = relay_stats_store().lock() {
-                                        stats.last_error = None;
-                                        stats.last_commit_method = Some("skipped_non_vault_key".to_string());
-                                        stats.last_save_commit_method = Some("skipped_non_vault_key".to_string());
-                                        stats.last_save_error = None;
-                                        stats.last_save_upstream_status = Some(200);
-                                        stats.last_save_upstream_body =
-                                            Some("relay skipped commit for non-vault callback key".to_string());
-                                    }
-                                    let mut ok =
-                                        Response::from_string(r#"{"error":0}"#).with_status_code(StatusCode(200));
-                                    if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
-                                        ok = ok.with_header(header);
-                                    }
-                                    let _ = request.respond(ok);
-                                    return;
-                                } else {
-                                    call_file_versions_fallback(&client, &auth, &file_id_guess, &upload_url, &bytes)
-                                };
-                                if let Err(fallback_err) = fallback_res {
-                                    // Print/export callbacks can reference transient/non-vault artifacts.
-                                    // If both commit paths report file-not-found, acknowledge callback to
-                                    // avoid ONLYOFFICE warning popups while preserving normal save strictness.
-                                    if is_file_not_found_err(&commit_err) && is_file_not_found_err(&fallback_err) {
-                                        if let Ok(mut stats) = relay_stats_store().lock() {
-                                            stats.last_error = None;
-                                            stats.last_commit_method =
-                                                Some("skipped_file_not_found_callback".to_string());
-                                            stats.last_save_commit_method =
-                                                Some("skipped_file_not_found_callback".to_string());
-                                            stats.last_save_error = None;
-                                            stats.last_save_upstream_status = Some(200);
-                                            stats.last_save_upstream_body = Some(
-                                                "relay skipped commit on file-not-found callback (likely print/export)"
-                                                    .to_string(),
-                                            );
-                                        }
-                                        let mut ok =
-                                            Response::from_string(r#"{"error":0}"#).with_status_code(StatusCode(200));
-                                        if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
-                                            ok = ok.with_header(header);
-                                        }
-                                        let _ = request.respond(ok);
-                                        return;
-                                    }
-                                    if let Ok(mut stats) = relay_stats_store().lock() {
-                                        stats.last_error = Some(format!(
-                                            "onlyofficeCommit failed: {}; fileVersions fallback failed: {}",
-                                            commit_err, fallback_err
-                                        ));
-                                        stats.last_commit_method = Some("none".to_string());
-                                        stats.last_save_commit_method = Some("none".to_string());
-                                        stats.last_save_error = stats.last_error.clone();
-                                    }
-                                    let _ = request.respond(
-                                        Response::from_string(
-                                            format!(
-                                                r#"{{"error":1,"message":"onlyofficeCommit failed: {}; fallback failed: {}"}}"#,
-                                                commit_err, fallback_err
-                                            )
-                                        )
-                                        .with_status_code(StatusCode(502)),
-                                    );
-                                    return;
-                                }
-                                if let Ok(mut stats) = relay_stats_store().lock() {
-                                    stats.last_upstream_status = Some(200);
-                                    stats.last_upstream_body = Some("relay committed via fileVersions fallback".to_string());
-                                    stats.last_error = None;
-                                    stats.last_commit_method = Some("fileVersions_fallback".to_string());
-                                    stats.last_save_upstream_status = Some(200);
-                                    stats.last_save_upstream_body =
-                                        Some("relay committed via fileVersions fallback".to_string());
-                                    stats.last_save_error = None;
-                                    stats.last_save_commit_method =
-                                        Some("fileVersions_fallback".to_string());
-                                }
-                                let mut ok = Response::from_string(r#"{"error":0}"#).with_status_code(StatusCode(200));
-                                if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
-                                    ok = ok.with_header(header);
-                                }
-                                let _ = request.respond(ok);
-                                return;
-                            }
-
-                            if let Ok(mut stats) = relay_stats_store().lock() {
-                                stats.last_upstream_status = Some(200);
-                                stats.last_upstream_body = Some("relay committed via onlyofficeCommit".to_string());
-                                stats.last_error = None;
-                                stats.last_commit_method = Some("onlyofficeCommit".to_string());
-                                stats.last_save_upstream_status = Some(200);
-                                stats.last_save_upstream_body =
-                                    Some("relay committed via onlyofficeCommit".to_string());
-                                stats.last_save_error = None;
-                                stats.last_save_commit_method = Some("onlyofficeCommit".to_string());
-                            }
-                            let mut ok = Response::from_string(r#"{"error":0}"#).with_status_code(StatusCode(200));
-                            if let Ok(header) = Header::from_bytes("Content-Type", b"application/json") {
-                                ok = ok.with_header(header);
-                            }
-                            let _ = request.respond(ok);
-                            return;
+                // Handle local ONLYOFFICE save callbacks end-to-end in the relay.
+                if is_save && !key.is_empty() && is_local_callback_url(&callback_url) {
+                    // FAIL CLOSED: without a verified signature the relay
+                    // downloads, uploads and commits nothing. Proxying such a
+                    // callback upstream instead would be no safer and less
+                    // honest — the edge function ACKs local-url callbacks on the
+                    // assumption that this relay performs the save.
+                    if auth.claims().is_none() {
+                        let reason = auth.reason();
+                        eprintln!("[onlyoffice-relay] REJECTED local save callback: {reason}");
+                        if let Ok(mut stats) = relay_stats_store().lock() {
+                            let message = format!("rejected unverified save callback: {reason}");
+                            stats.last_error = Some(message.clone());
+                            stats.last_save_error = Some(message);
+                            stats.last_save_commit_method = Some("rejected_unverified".to_string());
                         }
+                        respond_json(
+                            request,
+                            403,
+                            r#"{"error":1,"message":"invalid or missing ONLYOFFICE signature"}"#,
+                        );
+                        return;
                     }
+
+                    let users = view
+                        .get("users")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                .collect::<Vec<String>>()
+                        })
+                        .unwrap_or_default();
+
+                    handle_local_save(
+                        request,
+                        &client,
+                        &key,
+                        &callback_url,
+                        &users,
+                        status.unwrap_or(6),
+                    );
+                    return;
                 }
             }
 
@@ -1236,6 +1536,175 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#1a1a2e}
                     );
                 }
             }
+}
+
+
+/// Perform a VERIFIED local ONLYOFFICE save end-to-end: download the edited
+/// bytes, chunk-upload them to Supabase Storage, then commit a new version.
+///
+/// Every argument comes from claims that passed verify_onlyoffice_callback —
+/// this function must never be reached with values read off an unsigned body,
+/// because it publishes whatever `callback_url` serves as the new content of
+/// the vault file named by `key`.
+fn handle_local_save(
+    request: tiny_http::Request,
+    client: &reqwest::blocking::Client,
+    key: &str,
+    callback_url: &str,
+    users: &[String],
+    status: i64,
+) {
+    let auth = match get_relay_auth() {
+        Some(a) => a,
+        None => {
+            if let Ok(mut stats) = relay_stats_store().lock() {
+                stats.last_error = Some("missing relay auth token".to_string());
+                stats.last_save_error = Some("missing relay auth token".to_string());
+            }
+            respond_json(request, 500, r#"{"error":1,"message":"missing relay auth"}"#);
+            return;
+        }
+    };
+
+    // host.docker.internal only resolves inside the container; from here the
+    // same loopback socket answers on localhost. The host was already checked
+    // for equality against LOCAL_CALLBACK_HOSTS, so this rewrite cannot retarget
+    // the download somewhere else.
+    let fetch_url = callback_url.replace("host.docker.internal", "localhost");
+    let bytes = match client.get(&fetch_url).send() {
+        Ok(response) => match response.bytes() {
+            Ok(b) => b.to_vec(),
+            Err(e) => {
+                if let Ok(mut stats) = relay_stats_store().lock() {
+                    stats.last_error = Some(format!("download bytes failed: {e}"));
+                    stats.last_save_error = Some(format!("download bytes failed: {e}"));
+                }
+                respond_json(
+                    request,
+                    502,
+                    r#"{"error":1,"message":"download bytes failed"}"#,
+                );
+                return;
+            }
+        },
+        Err(e) => {
+            if let Ok(mut stats) = relay_stats_store().lock() {
+                stats.last_error = Some(format!("download failed: {e}"));
+                stats.last_save_error = Some(format!("download failed: {e}"));
+            }
+            respond_json(request, 502, r#"{"error":1,"message":"download failed"}"#);
+            return;
+        }
+    };
+
+    let ext = infer_office_ext_from_callback_url(callback_url);
+    let filename = format!("onlyoffice_{}.{}", key, ext);
+    let upload_url = match upload_bytes_to_storage(client, &auth, &filename, &bytes) {
+        Ok(url) => url,
+        Err(err) => {
+            if let Ok(mut stats) = relay_stats_store().lock() {
+                stats.last_error = Some(err.clone());
+                stats.last_save_error = Some(err.clone());
+            }
+            respond_json(request, 502, &format!(r#"{{"error":1,"message":"{}"}}"#, err));
+            return;
+        }
+    };
+
+    if let Err(commit_err) = call_onlyoffice_commit(
+        client,
+        &auth,
+        key,
+        status,
+        users,
+        &upload_url,
+        bytes.len(),
+    ) {
+        let file_id_guess = extract_file_id_from_key(key).unwrap_or_default();
+        let fallback_res = if file_id_guess.is_empty() {
+            // Some ONLYOFFICE callbacks (print/export) do not carry a vault file key.
+            // Acknowledge to prevent editor warning; skip version commit.
+            if let Ok(mut stats) = relay_stats_store().lock() {
+                stats.last_error = None;
+                stats.last_commit_method = Some("skipped_non_vault_key".to_string());
+                stats.last_save_commit_method = Some("skipped_non_vault_key".to_string());
+                stats.last_save_error = None;
+                stats.last_save_upstream_status = Some(200);
+                stats.last_save_upstream_body =
+                    Some("relay skipped commit for non-vault callback key".to_string());
+            }
+            respond_json(request, 200, r#"{"error":0}"#);
+            return;
+        } else {
+            call_file_versions_fallback(client, &auth, &file_id_guess, &upload_url, &bytes)
+        };
+
+        if let Err(fallback_err) = fallback_res {
+            // Print/export callbacks can reference transient/non-vault artifacts.
+            // If both commit paths report file-not-found, acknowledge callback to
+            // avoid ONLYOFFICE warning popups while preserving normal save strictness.
+            if is_file_not_found_err(&commit_err) && is_file_not_found_err(&fallback_err) {
+                if let Ok(mut stats) = relay_stats_store().lock() {
+                    stats.last_error = None;
+                    stats.last_commit_method = Some("skipped_file_not_found_callback".to_string());
+                    stats.last_save_commit_method =
+                        Some("skipped_file_not_found_callback".to_string());
+                    stats.last_save_error = None;
+                    stats.last_save_upstream_status = Some(200);
+                    stats.last_save_upstream_body = Some(
+                        "relay skipped commit on file-not-found callback (likely print/export)"
+                            .to_string(),
+                    );
+                }
+                respond_json(request, 200, r#"{"error":0}"#);
+                return;
+            }
+            if let Ok(mut stats) = relay_stats_store().lock() {
+                stats.last_error = Some(format!(
+                    "onlyofficeCommit failed: {}; fileVersions fallback failed: {}",
+                    commit_err, fallback_err
+                ));
+                stats.last_commit_method = Some("none".to_string());
+                stats.last_save_commit_method = Some("none".to_string());
+                stats.last_save_error = stats.last_error.clone();
+            }
+            respond_json(
+                request,
+                502,
+                &format!(
+                    r#"{{"error":1,"message":"onlyofficeCommit failed: {}; fallback failed: {}"}}"#,
+                    commit_err, fallback_err
+                ),
+            );
+            return;
+        }
+
+        if let Ok(mut stats) = relay_stats_store().lock() {
+            stats.last_upstream_status = Some(200);
+            stats.last_upstream_body = Some("relay committed via fileVersions fallback".to_string());
+            stats.last_error = None;
+            stats.last_commit_method = Some("fileVersions_fallback".to_string());
+            stats.last_save_upstream_status = Some(200);
+            stats.last_save_upstream_body =
+                Some("relay committed via fileVersions fallback".to_string());
+            stats.last_save_error = None;
+            stats.last_save_commit_method = Some("fileVersions_fallback".to_string());
+        }
+        respond_json(request, 200, r#"{"error":0}"#);
+        return;
+    }
+
+    if let Ok(mut stats) = relay_stats_store().lock() {
+        stats.last_upstream_status = Some(200);
+        stats.last_upstream_body = Some("relay committed via onlyofficeCommit".to_string());
+        stats.last_error = None;
+        stats.last_commit_method = Some("onlyofficeCommit".to_string());
+        stats.last_save_upstream_status = Some(200);
+        stats.last_save_upstream_body = Some("relay committed via onlyofficeCommit".to_string());
+        stats.last_save_error = None;
+        stats.last_save_commit_method = Some("onlyofficeCommit".to_string());
+    }
+    respond_json(request, 200, r#"{"error":0}"#);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1472,5 +1941,334 @@ mod tests {
     fn sanitize_filename_rejects_blank_results() {
         assert_eq!(sanitize_filename("   "), None);
         assert_eq!(sanitize_filename(""), None);
+    }
+
+    // ── ONLYOFFICE callback authentication ─────────────────────────────────
+
+    const SECRET: &str = "ev-oo-test-secret";
+    /// Fixed "now" for deterministic exp/nbf assertions.
+    const NOW: i64 = 1_700_000_000;
+
+    /// base64url encode, unpadded — the inverse of b64url_decode. Test-only:
+    /// production code never mints ONLYOFFICE tokens, it only verifies them.
+    fn b64url_encode(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let triple = [
+                chunk[0],
+                *chunk.get(1).unwrap_or(&0),
+                *chunk.get(2).unwrap_or(&0),
+            ];
+            let n = ((triple[0] as u32) << 16) | ((triple[1] as u32) << 8) | triple[2] as u32;
+            let indexes = [(n >> 18) & 63, (n >> 12) & 63, (n >> 6) & 63, n & 63];
+            for index in indexes.iter().take(chunk.len() + 1) {
+                out.push(ALPHABET[*index as usize] as char);
+            }
+        }
+        out
+    }
+
+    /// Mint a token the way an ONLYOFFICE document server would.
+    fn sign_jwt(header: serde_json::Value, payload: serde_json::Value, secret: &str) -> String {
+        let header_b64 = b64url_encode(header.to_string().as_bytes());
+        let payload_b64 = b64url_encode(payload.to_string().as_bytes());
+        let mac = hmac_sha256(
+            secret.as_bytes(),
+            format!("{header_b64}.{payload_b64}").as_bytes(),
+        );
+        format!("{header_b64}.{payload_b64}.{}", b64url_encode(&mac))
+    }
+
+    fn hs256(payload: serde_json::Value) -> String {
+        sign_jwt(serde_json::json!({"alg": "HS256", "typ": "JWT"}), payload, SECRET)
+    }
+
+    fn save_body() -> serde_json::Value {
+        serde_json::json!({
+            "status": 2,
+            "key": format!("{UUID}_v1"),
+            "url": "http://localhost:8080/cache/files/doc.docx",
+            "users": ["editor@example.com"],
+        })
+    }
+
+    // ── hmac_sha256 (RFC 4231 vectors) ─────────────────────────────────────
+
+    #[test]
+    fn hmac_sha256_matches_rfc4231_case_one() {
+        let mac = hmac_sha256(&[0x0b; 20], b"Hi There");
+        assert_eq!(
+            hex::encode(mac),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
+    }
+
+    #[test]
+    fn hmac_sha256_matches_rfc4231_case_two() {
+        let mac = hmac_sha256(b"Jefe", b"what do ya want for nothing?");
+        assert_eq!(
+            hex::encode(mac),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+    }
+
+    #[test]
+    fn hmac_sha256_hashes_keys_longer_than_the_block() {
+        // RFC 4231 case 6 — exercises the >64-byte key branch.
+        let mac = hmac_sha256(
+            &[0xaa; 131],
+            b"Test Using Larger Than Block-Size Key - Hash Key First",
+        );
+        assert_eq!(
+            hex::encode(mac),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
+    }
+
+    // ── b64url_decode ──────────────────────────────────────────────────────
+
+    #[test]
+    fn b64url_decode_roundtrips_all_byte_lengths() {
+        for len in 0..8usize {
+            let bytes: Vec<u8> = (0..len).map(|i| (i * 37 + 251) as u8).collect();
+            assert_eq!(b64url_decode(&b64url_encode(&bytes)), Some(bytes));
+        }
+    }
+
+    #[test]
+    fn b64url_decode_rejects_standard_base64_and_whitespace() {
+        assert_eq!(b64url_decode("ab+d"), None);
+        assert_eq!(b64url_decode("ab/d"), None);
+        assert_eq!(b64url_decode("ab d"), None);
+    }
+
+    // ── verify_hs256 ───────────────────────────────────────────────────────
+
+    #[test]
+    fn verify_hs256_accepts_a_valid_token() {
+        let token = hs256(serde_json::json!({"status": 2, "key": "k"}));
+        let claims = verify_hs256(&token, SECRET, NOW).expect("valid token must verify");
+        assert_eq!(claims.get("key").and_then(|v| v.as_str()), Some("k"));
+    }
+
+    #[test]
+    fn verify_hs256_rejects_a_tampered_payload() {
+        let token = hs256(serde_json::json!({"status": 2, "url": "http://localhost/good.docx"}));
+        let mut parts: Vec<&str> = token.split('.').collect();
+        let forged_payload = b64url_encode(
+            serde_json::json!({"status": 2, "url": "http://evil.example/bad.docx"})
+                .to_string()
+                .as_bytes(),
+        );
+        parts[1] = &forged_payload;
+        assert_eq!(verify_hs256(&parts.join("."), SECRET, NOW), None);
+    }
+
+    #[test]
+    fn verify_hs256_rejects_a_foreign_secret() {
+        let token = sign_jwt(
+            serde_json::json!({"alg": "HS256"}),
+            serde_json::json!({"status": 2}),
+            "attacker-secret",
+        );
+        assert_eq!(verify_hs256(&token, SECRET, NOW), None);
+    }
+
+    #[test]
+    fn verify_hs256_rejects_alg_none() {
+        // The classic bypass: correct claims, empty signature, "alg":"none".
+        let header = b64url_encode(br#"{"alg":"none","typ":"JWT"}"#);
+        let payload = b64url_encode(serde_json::json!({"status": 2}).to_string().as_bytes());
+        assert_eq!(verify_hs256(&format!("{header}.{payload}."), SECRET, NOW), None);
+        // ...and with a signature segment that is merely wrong rather than empty.
+        assert_eq!(
+            verify_hs256(&format!("{header}.{payload}.AAAA"), SECRET, NOW),
+            None
+        );
+    }
+
+    #[test]
+    fn verify_hs256_rejects_non_hs256_algorithms() {
+        // Key confusion: a token whose MAC is a valid HMAC over the secret but
+        // which claims RS256 must not be accepted as an HS256 token.
+        let token = sign_jwt(
+            serde_json::json!({"alg": "RS256"}),
+            serde_json::json!({"status": 2}),
+            SECRET,
+        );
+        assert_eq!(verify_hs256(&token, SECRET, NOW), None);
+    }
+
+    #[test]
+    fn verify_hs256_rejects_malformed_tokens() {
+        assert_eq!(verify_hs256("", SECRET, NOW), None);
+        assert_eq!(verify_hs256("only.two", SECRET, NOW), None);
+        assert_eq!(verify_hs256("a.b.c.d", SECRET, NOW), None);
+    }
+
+    #[test]
+    fn verify_hs256_honours_exp_within_clock_skew() {
+        let fresh = hs256(serde_json::json!({"status": 2, "exp": NOW + 60}));
+        assert!(verify_hs256(&fresh, SECRET, NOW).is_some());
+
+        // Just inside the skew allowance — still accepted.
+        let borderline = hs256(serde_json::json!({"status": 2, "exp": NOW - 60}));
+        assert!(verify_hs256(&borderline, SECRET, NOW).is_some());
+
+        let expired = hs256(serde_json::json!({"status": 2, "exp": NOW - 3600}));
+        assert_eq!(verify_hs256(&expired, SECRET, NOW), None);
+    }
+
+    #[test]
+    fn verify_hs256_rejects_tokens_not_yet_valid() {
+        let future = hs256(serde_json::json!({"status": 2, "nbf": NOW + 3600}));
+        assert_eq!(verify_hs256(&future, SECRET, NOW), None);
+
+        let nearly_now = hs256(serde_json::json!({"status": 2, "nbf": NOW + 60}));
+        assert!(verify_hs256(&nearly_now, SECRET, NOW).is_some());
+    }
+
+    // ── verify_onlyoffice_callback ─────────────────────────────────────────
+
+    #[test]
+    fn callback_auth_accepts_a_body_token() {
+        let mut body = save_body();
+        body["token"] = serde_json::json!(hs256(save_body()));
+        let auth = verify_onlyoffice_callback(Some(SECRET), None, &body, NOW);
+        let claims = auth.claims().expect("body token must verify");
+        assert_eq!(claims.get("status").and_then(json_i64), Some(2));
+    }
+
+    #[test]
+    fn callback_auth_accepts_a_header_token_and_unwraps_its_payload() {
+        // The header token wraps the callback as { "payload": { ... } }.
+        let token = hs256(serde_json::json!({"payload": save_body()}));
+        let auth = verify_onlyoffice_callback(Some(SECRET), Some(&token), &save_body(), NOW);
+        let claims = auth.claims().expect("header token must verify");
+        assert_eq!(
+            claims.get("url").and_then(|v| v.as_str()),
+            Some("http://localhost:8080/cache/files/doc.docx")
+        );
+    }
+
+    #[test]
+    fn callback_auth_falls_through_to_the_body_token() {
+        // The header can legitimately carry a NON-ONLYOFFICE token (the relay's
+        // Supabase JWT fallback), so a first-candidate failure must not end the
+        // check.
+        let mut body = save_body();
+        body["token"] = serde_json::json!(hs256(save_body()));
+        let foreign = sign_jwt(
+            serde_json::json!({"alg": "HS256"}),
+            serde_json::json!({"sub": "supabase-user"}),
+            "some-other-secret",
+        );
+        let auth = verify_onlyoffice_callback(Some(SECRET), Some(&foreign), &body, NOW);
+        assert!(auth.claims().is_some());
+    }
+
+    #[test]
+    fn callback_auth_returns_signed_claims_not_the_rewritten_envelope() {
+        // Captured-token replay: valid token, attacker-rewritten body. The
+        // relay must act on the SIGNED url, never the envelope's.
+        let token = hs256(save_body());
+        let forged = serde_json::json!({
+            "status": 2,
+            "key": format!("{UUID}_v1"),
+            "url": "http://localhost:9/attacker-payload.docx",
+            "token": token,
+        });
+        let auth = verify_onlyoffice_callback(Some(SECRET), None, &forged, NOW);
+        let claims = auth.claims().expect("token itself is genuine");
+        assert_eq!(
+            claims.get("url").and_then(|v| v.as_str()),
+            Some("http://localhost:8080/cache/files/doc.docx")
+        );
+    }
+
+    #[test]
+    fn callback_auth_fails_closed_without_a_secret() {
+        let mut body = save_body();
+        body["token"] = serde_json::json!(hs256(save_body()));
+        assert!(verify_onlyoffice_callback(None, None, &body, NOW)
+            .claims()
+            .is_none());
+        assert!(verify_onlyoffice_callback(Some(""), None, &body, NOW)
+            .claims()
+            .is_none());
+        assert!(matches!(
+            verify_onlyoffice_callback(None, None, &body, NOW),
+            CallbackAuth::NoSecret
+        ));
+    }
+
+    #[test]
+    fn callback_auth_reports_a_missing_token() {
+        let auth = verify_onlyoffice_callback(Some(SECRET), None, &save_body(), NOW);
+        assert!(auth.claims().is_none());
+        assert!(matches!(auth, CallbackAuth::NoToken));
+    }
+
+    #[test]
+    fn callback_auth_rejects_a_forged_token() {
+        let mut body = save_body();
+        body["token"] = serde_json::json!(sign_jwt(
+            serde_json::json!({"alg": "HS256"}),
+            save_body(),
+            "attacker-secret"
+        ));
+        let auth = verify_onlyoffice_callback(Some(SECRET), None, &body, NOW);
+        assert!(auth.claims().is_none());
+        assert!(matches!(auth, CallbackAuth::Invalid));
+    }
+
+    // ── strip_token_prefix ─────────────────────────────────────────────────
+
+    #[test]
+    fn strip_token_prefix_removes_bearer_case_insensitively() {
+        assert_eq!(strip_token_prefix("Bearer abc.def.ghi", "Bearer "), "abc.def.ghi");
+        assert_eq!(strip_token_prefix("bearer abc", "Bearer "), "abc");
+        assert_eq!(strip_token_prefix("abc", "Bearer "), "abc");
+        assert_eq!(strip_token_prefix("  abc  ", ""), "abc");
+        // A prefix longer than the value must not panic or over-slice.
+        assert_eq!(strip_token_prefix("hi", "Bearer "), "hi");
+    }
+
+    // ── url_host / is_local_callback_url ───────────────────────────────────
+
+    #[test]
+    fn url_host_strips_userinfo_port_and_brackets() {
+        assert_eq!(url_host("http://localhost:8080/x"), Some("localhost".into()));
+        assert_eq!(url_host("http://user:pw@127.0.0.1/x"), Some("127.0.0.1".into()));
+        assert_eq!(url_host("http://a@b@evil.example/x"), Some("evil.example".into()));
+        assert_eq!(url_host("http://[::1]:8080/x"), Some("::1".into()));
+        assert_eq!(url_host("http://LOCALHOST./x"), Some("localhost".into()));
+        assert_eq!(url_host("http://host.docker.internal"), Some("host.docker.internal".into()));
+        assert_eq!(url_host("file:///etc/passwd"), None);
+        assert_eq!(url_host("/relative/path"), None);
+        assert_eq!(url_host("http:///nohost"), None);
+    }
+
+    #[test]
+    fn local_callback_url_accepts_loopback_hosts() {
+        assert!(is_local_callback_url("http://localhost:8080/cache/f.docx"));
+        assert!(is_local_callback_url("http://127.0.0.1:8080/cache/f.docx"));
+        assert!(is_local_callback_url("http://[::1]:8080/cache/f.docx"));
+        assert!(is_local_callback_url("http://host.docker.internal:17171/f.docx"));
+        assert!(is_local_callback_url("HTTP://LocalHost/f.docx"));
+    }
+
+    #[test]
+    fn local_callback_url_rejects_substring_lookalikes() {
+        // The bug this replaces: `url.contains("localhost")`.
+        assert!(!is_local_callback_url("http://evil.example/payload.docx?localhost"));
+        assert!(!is_local_callback_url("http://localhost.evil.example/payload.docx"));
+        assert!(!is_local_callback_url("http://evil.example/localhost/payload.docx"));
+        assert!(!is_local_callback_url("http://evil.example/#127.0.0.1"));
+        assert!(!is_local_callback_url("http://user@evil.example/?host.docker.internal"));
+        assert!(!is_local_callback_url("http://127.0.0.1.evil.example/f.docx"));
+        assert!(!is_local_callback_url(""));
     }
 }

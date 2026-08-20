@@ -6,8 +6,12 @@ import { useUiStore } from "../../stores/uiStore";
 import { safeEntityUpdate } from "../../services/entityService";
 import { syncRemoteDelta } from "../../services/deltaSyncService";
 import {
-  fileKindFromItem, asString, toAdapterItem, getPreviewUrlForItem, formatRelativeTime, type PreviewKind,
+  fileKindFromItem, asString, toAdapterItem, getPreviewUrlForItem, formatRelativeTime,
+  presenceEditors, presenceLabel, type PreviewKind,
 } from "../../services/helpers";
+// avatarColor/initials live with the workspace UI; imported rather than copied
+// so every avatar in the app keeps the same palette and initial rules.
+import { avatarColor, currentUserEmail, initials } from "../tabs/workspaces/workspaceHelpers";
 import type { DesktopItem } from "../../services/helpers";
 import { resolveFreshFileUrl } from "../../services/fileOps";
 import {
@@ -145,6 +149,13 @@ export default function PreviewEditModal() {
   const relativeTime = formatRelativeTime(updatedAtIso);
   const translatable = isTranslatable(realKind, item);
 
+  // Live co-editors, current user excluded (see presenceEditors). Rendered
+  // inside .modal-head so it survives office-mode, where the title block is
+  // hidden and the head is pinned to the top-right of the ONLYOFFICE canvas.
+  const editors = presenceEditors(item, currentUserEmail());
+  const presence = presenceLabel(editors);
+  const presenceText = presence ? tr(presence.key, presence.vars) : "";
+
   async function handleOpenNative() {
     const previewUrl = await resolveFreshFileUrl(item!);
     if (!previewUrl) { setStatusText(t("previewEdit.noFileUrl")); return; }
@@ -268,6 +279,26 @@ export default function PreviewEditModal() {
             <h3>{mode === "preview" ? tr("previewEdit.preview") : tr("previewEdit.edit")}: {item.title}</h3>
             <p className="files-scope-label">{relativeTime ? tr("previewEdit.updated", { time: relativeTime }) : ""}</p>
           </div>
+          {editors.length > 0 && (
+            <div className="presence-stack preview-edit-presence" title={presenceText}>
+              <span className="presence-dot" aria-hidden="true" />
+              <span className="presence-avatars" aria-hidden="true">
+                {editors.slice(0, 4).map((e) => (
+                  <span
+                    key={e.id}
+                    className={`presence-avatar${e.name ? "" : " presence-avatar-anon"}`}
+                    style={e.name ? { background: avatarColor(e.name) } : undefined}
+                  >
+                    {e.name ? initials(e.name) : "?"}
+                  </span>
+                ))}
+                {editors.length > 4 && (
+                  <span className="presence-avatar presence-avatar-more">+{editors.length - 4}</span>
+                )}
+              </span>
+              <span className="presence-label">{presenceText}</span>
+            </div>
+          )}
           <button type="button" className="ghost" onClick={handleClose} aria-label={tr("common.close")}>&#x2715;</button>
         </div>
 

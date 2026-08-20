@@ -5305,3 +5305,99 @@ button.space-invite-chip.emphasized {
     transition: none;
   }
 }
+
+/* ── Co-editing presence ──────────────────────────────────────────────────
+   Stacked avatars for the people live in a document right now. Shown in the
+   file row (avatars only, name in the tooltip) and in the preview/edit modal
+   head (avatars + sentence). The current user is never in the stack. */
+
+.presence-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.presence-avatars {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.presence-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  border: 2px solid var(--panel);
+  margin-left: -6px;
+  flex-shrink: 0;
+}
+
+.presence-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Identity the server could not resolve to a person (opaque editor id). */
+.presence-avatar-anon {
+  background: #3f3f46;
+  color: #e4e4e7;
+}
+
+.presence-avatar-more {
+  background: #1a1a24;
+  color: #a1a1aa;
+  font-size: 9px;
+}
+
+.presence-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15);
+  flex-shrink: 0;
+  animation: presence-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes presence-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.presence-label {
+  font-size: 12px;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Modal head: pushed against the close button, and legible as a pill over the
+   ONLYOFFICE canvas in office-mode (where the head floats over the editor). */
+.preview-edit-presence {
+  margin-left: auto;
+  margin-right: 10px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(17, 17, 24, 0.9);
+  max-width: min(46vw, 420px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot {
+    animation: none;
+  }
+}
+
+/* File rows are compact — keep the stack from growing the row. */
+.file-row-meta .presence-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}

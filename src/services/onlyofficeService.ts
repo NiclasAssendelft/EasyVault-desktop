@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeServerUrl } from "../storage";
+import { getPreferredUploadToken, getAuthToken, getApiKey, getOnlyofficeServerUrl, getOnlyofficeJwtSecret } from "../storage";
 import { usePreviewEditStore } from "../stores/previewEditStore";
 import { useFilesStore } from "../stores/filesStore";
 import { useUiStore } from "../stores/uiStore";
@@ -51,6 +51,13 @@ export async function setupOnlyofficeLocalRelay(): Promise<void> {
       await invoke("set_onlyoffice_relay_auth", {
         token: relayToken,
         apiKey: getApiKey(),
+        // Lets the relay verify ONLYOFFICE's signature on inbound callbacks
+        // (fail-closed without it). Only the docker-local dev setup routes
+        // callbacks through the relay; with the remote server they go straight
+        // to the edge function, which verifies independently. Empty unless a
+        // secret was entered in Settings — the relay also reads
+        // ONLYOFFICE_JWT_SECRET from the environment.
+        onlyofficeJwtSecret: getOnlyofficeJwtSecret(),
       });
     }
     console.log(`ONLYOFFICE relay ready on ${usePreviewEditStore.getState().onlyofficeRelayHostCallbackUrl}`);
