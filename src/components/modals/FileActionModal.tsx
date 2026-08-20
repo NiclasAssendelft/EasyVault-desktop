@@ -13,6 +13,7 @@ import { fileKindFromItem, asString, toDisplayName } from "../../services/helper
 import { resolveFreshFileUrl } from "../../services/fileOps";
 import { invokeEdgeFunction } from "../../api";
 import { safeEntityUpdate } from "../../services/entityService";
+import { subscribeToTable, LIVE_POLL_INTERVAL_MS, type RealtimeRow } from "../../services/realtimeService";
 import { useT } from "../../i18n";
 import { useEscapeClose } from "../../hooks/useEscapeClose";
 
@@ -125,11 +126,32 @@ type FileComment = {
   created_at: string;
 };
 
+/**
+ * Cadence when the Realtime feed is not carrying this list — the interval this
+ * section has always used. A live channel only lets it stretch to
+ * LIVE_POLL_INTERVAL_MS; any non-SUBSCRIBED status snaps it straight back here.
+ */
+const COMMENTS_POLL_MS = 8000;
+
+/** Narrow a raw `file_comments` row from the change feed. */
+function toFileComment(row: RealtimeRow): FileComment {
+  return {
+    id: asString(row.id),
+    item_id: asString(row.item_id),
+    sender_email: asString(row.sender_email),
+    sender_name: asString(row.sender_name),
+    message: asString(row.message),
+    created_at: asString(row.created_at),
+  };
+}
+
 function FileCommentsSection({ itemId, spaceId }: { itemId: string; spaceId: string }) {
   const t = useT();
   const [comments, setComments] = useState<FileComment[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  /** Comments channel is SUBSCRIBED → the poll may run at the slow cadence. */
+  const [live, setLive] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const fetchComments = useCallback(async () => {
@@ -141,9 +163,43 @@ function FileCommentsSection({ itemId, spaceId }: { itemId: string; spaceId: str
 
   useEffect(() => {
     fetchComments();
-    const timer = setInterval(fetchComments, 8000);
-    return () => clearInterval(timer);
   }, [fetchComments]);
+
+  /**
+   * Apply a change-feed row by id — the same comment can arrive from both the
+   * poll and the feed, so this has to be idempotent.
+   */
+  const applyCommentRow = useCallback((row: RealtimeRow) => {
+    const comment = toFileComment(row);
+    if (!comment.id) return;
+    setComments((prev) => {
+      const idx = prev.findIndex((c) => c.id === comment.id);
+      if (idx === -1) return [...prev, comment];
+      const next = prev.slice();
+      next[idx] = comment;
+      return next;
+    });
+  }, []);
+
+  // Live comments for this item. Legacy 24-hex item ids are not valid UUIDs, so
+  // the server rejects the binding, the channel reports CHANNEL_ERROR and the
+  // poll below simply stays at its normal cadence — today's behaviour exactly.
+  useEffect(() => {
+    setLive(false);
+    return subscribeToTable({
+      table: "file_comments",
+      filter: `item_id=eq.${itemId}`,
+      onInsert: applyCommentRow,
+      onUpdate: applyCommentRow,
+      onStatus: (status) => setLive(status === "connected"),
+    });
+  }, [itemId, applyCommentRow]);
+
+  // Backstop poll: always running, only its cadence depends on the live feed.
+  useEffect(() => {
+    const timer = setInterval(fetchComments, live ? LIVE_POLL_INTERVAL_MS : COMMENTS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [fetchComments, live]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });

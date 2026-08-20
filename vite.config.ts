@@ -45,6 +45,9 @@ export default defineConfig(async () => ({
           if (pkg.startsWith("@tauri-apps/")) return "vendor-tauri";
           if (pkg === "zustand") return "vendor-zustand";
           if (pkg === "pdfjs-dist" || pkg === "mammoth") return "vendor-docs";
+          // realtime-js + its two runtime deps (@supabase/phoenix, tslib) —
+          // lazily imported by realtimeService, so it stays off the initial load.
+          if (pkg.startsWith("@supabase/")) return "vendor-realtime";
           return undefined;
         },
       },

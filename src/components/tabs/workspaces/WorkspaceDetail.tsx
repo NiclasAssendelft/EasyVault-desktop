@@ -1,10 +1,11 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useFilesStore } from "../../../stores/filesStore";
 import { useUiStore } from "../../../stores/uiStore";
-import { asString, asBool, toDisplayName, formatRelativeTime, extOf, spaceColor, isSpaceOwner } from "../../../services/helpers";
+import { asString, asBool, asArray, toDisplayName, formatRelativeTime, extOf, spaceColor, isSpaceOwner } from "../../../services/helpers";
 import { safeEntityCreate, safeEntityUpdate, deleteRemoteEntity } from "../../../services/entityService";
 import { invokeEdgeFunction, entityFilter } from "../../../api";
 import { refreshSharedFromRemote } from "../../../services/deltaSyncService";
+import { subscribeToTable, LIVE_POLL_INTERVAL_MS, type RealtimeRow } from "../../../services/realtimeService";
 import { uploadSelectedFilesToSpace } from "../../../services/fileOps";
 import { useT, t } from "../../../i18n";
 import { INVITE_PAGE_BASE } from "../../../config";
@@ -46,6 +47,23 @@ type CurrentShareLink = { id: string; url: string; expiresAt: string | null };
 
 /** Rows pulled per space for the calendar panel — same cap deltaSyncService uses. */
 const SPACE_EVENT_LIMIT = 500;
+
+/**
+ * Poll cadences when the Realtime feed is *not* carrying a panel. These are the
+ * intervals this component has always used; a live channel only lets the poll
+ * stretch to LIVE_POLL_INTERVAL_MS, and any non-SUBSCRIBED status snaps it back
+ * here. The poll is never removed — Realtime is an accelerator, not the path.
+ */
+const CHAT_POLL_MS = 5000;
+const TASKS_POLL_MS = 10000;
+/**
+ * Unchanged, and deliberately not Realtime-backed: `calendar_events` is not in
+ * the `supabase_realtime` publication (00021 publishes space_messages,
+ * space_tasks, file_comments). Subscribing anyway would report SUBSCRIBED while
+ * never delivering a row, and the poll would slow down for nothing. Add the
+ * subscription here once the table is published.
+ */
+const EVENTS_POLL_MS = 30000;
 
 function inviteLinkUrl(link: SpaceInviteLink): string {
   if (link.url) return link.url;
@@ -108,6 +126,51 @@ function formatEventWhen(iso: string, allDay: boolean): string {
   );
 }
 
+/** Narrow a raw `space_messages` row (Realtime change feed) to the chat shape. */
+function toSpaceMessage(row: RealtimeRow): SpaceMessage {
+  return {
+    id: asString(row.id),
+    space_id: asString(row.space_id),
+    sender_email: asString(row.sender_email),
+    sender_name: asString(row.sender_name),
+    message: asString(row.message),
+    created_at: asString(row.created_at),
+    is_pinned: asBool(row.is_pinned),
+    pinned_by: asString(row.pinned_by),
+    reply_to_id: asString(row.reply_to_id),
+    mentions: asArray(row.mentions),
+  };
+}
+
+/** Narrow a raw `space_tasks` row (Realtime change feed) to the tasks shape. */
+function toSpaceTask(row: RealtimeRow): SpaceTask {
+  return {
+    id: asString(row.id),
+    space_id: asString(row.space_id),
+    title: asString(row.title),
+    is_completed: asBool(row.is_completed),
+    assigned_to: asString(row.assigned_to),
+    due_date: asString(row.due_date),
+    created_by: asString(row.created_by),
+    created_at: asString(row.created_at),
+  };
+}
+
+/**
+ * Merge one change-feed row into a locally held list **by id**. A row can reach
+ * us from both the poll and the feed, so this has to be idempotent: known ids
+ * are replaced in place (the feed carries the full new row), unknown ids are
+ * appended. Ordering is left to the next poll, which re-reads canonical order.
+ */
+function mergeById<T extends { id: string }>(list: T[], row: T): T[] {
+  if (!row.id) return list;
+  const idx = list.findIndex((existing) => existing.id === row.id);
+  if (idx === -1) return [...list, row];
+  const next = list.slice();
+  next[idx] = row;
+  return next;
+}
+
 /** Narrow a raw PostgREST `calendar_events` row to the fields this panel renders. */
 function toSpaceEvent(row: Record<string, unknown>): SpaceEvent {
   return {
@@ -138,6 +201,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  /** Chat channel is SUBSCRIBED → the chat poll may run at the slow cadence. */
+  const [chatLive, setChatLive] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [replyTo, setReplyTo] = useState<SpaceMessage | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -152,6 +217,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [dragOver, setDragOver] = useState(false);
   const [tasks, setTasks] = useState<SpaceTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  /** Tasks channel is SUBSCRIBED → the tasks poll may run at the slow cadence. */
+  const [tasksLive, setTasksLive] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [showCompleted, setShowCompleted] = useState(false);
   const [events, setEvents] = useState<SpaceEvent[]>([]);
@@ -262,9 +329,35 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     if (activeSection !== "chat") return;
     setChatLoading(true);
     fetchChatMessages(activeSpaceId).finally(() => setChatLoading(false));
-    const timer = setInterval(() => fetchChatMessages(activeSpaceId), 5000);
-    return () => clearInterval(timer);
   }, [activeSection, activeSpaceId, fetchChatMessages]);
+
+  const applyChatRow = useCallback((row: RealtimeRow) => {
+    setChatMessages((prev) => mergeById(prev, toSpaceMessage(row)));
+  }, []);
+
+  // Live chat while the panel is open. Unsubscribes on unmount, on leaving the
+  // panel, and on switching space — the returned disposer is the whole cleanup.
+  useEffect(() => {
+    if (activeSection !== "chat") return;
+    setChatLive(false);
+    return subscribeToTable({
+      table: "space_messages",
+      filter: `space_id=eq.${activeSpaceId}`,
+      onInsert: applyChatRow,
+      onUpdate: applyChatRow,
+      onStatus: (status) => setChatLive(status === "connected"),
+    });
+  }, [activeSection, activeSpaceId, applyChatRow]);
+
+  // Backstop poll: always running, only its cadence depends on the live feed.
+  useEffect(() => {
+    if (activeSection !== "chat") return;
+    const timer = setInterval(
+      () => fetchChatMessages(activeSpaceId),
+      chatLive ? LIVE_POLL_INTERVAL_MS : CHAT_POLL_MS,
+    );
+    return () => clearInterval(timer);
+  }, [activeSection, activeSpaceId, fetchChatMessages, chatLive]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -281,9 +374,34 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     if (activeSection !== "tasks") return;
     setTasksLoading(true);
     fetchTasks(activeSpaceId).finally(() => setTasksLoading(false));
-    const timer = setInterval(() => fetchTasks(activeSpaceId), 10000);
-    return () => clearInterval(timer);
   }, [activeSection, activeSpaceId, fetchTasks]);
+
+  const applyTaskRow = useCallback((row: RealtimeRow) => {
+    setTasks((prev) => mergeById(prev, toSpaceTask(row)));
+  }, []);
+
+  // Live tasks while the panel is open. Completion toggles arrive as UPDATEs;
+  // deletions do not (DELETE is never bound) so the backstop poll clears those.
+  useEffect(() => {
+    if (activeSection !== "tasks") return;
+    setTasksLive(false);
+    return subscribeToTable({
+      table: "space_tasks",
+      filter: `space_id=eq.${activeSpaceId}`,
+      onInsert: applyTaskRow,
+      onUpdate: applyTaskRow,
+      onStatus: (status) => setTasksLive(status === "connected"),
+    });
+  }, [activeSection, activeSpaceId, applyTaskRow]);
+
+  useEffect(() => {
+    if (activeSection !== "tasks") return;
+    const timer = setInterval(
+      () => fetchTasks(activeSpaceId),
+      tasksLive ? LIVE_POLL_INTERVAL_MS : TASKS_POLL_MS,
+    );
+    return () => clearInterval(timer);
+  }, [activeSection, activeSpaceId, fetchTasks, tasksLive]);
 
   /**
    * Space events come straight off PostgREST filtered by `space_id` —
@@ -316,7 +434,7 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     if (activeSection !== "calendar") return;
     setEventsLoading(true);
     fetchEvents(activeSpaceId).finally(() => setEventsLoading(false));
-    const timer = setInterval(() => fetchEvents(activeSpaceId), 30000);
+    const timer = setInterval(() => fetchEvents(activeSpaceId), EVENTS_POLL_MS);
     return () => clearInterval(timer);
   }, [activeSection, activeSpaceId, fetchEvents]);
 
