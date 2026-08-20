@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useFilesStore } from "../../../stores/filesStore";
 import { useUiStore } from "../../../stores/uiStore";
-import { asString, toDisplayName, formatRelativeTime, extOf } from "../../../services/helpers";
-import { safeEntityUpdate } from "../../../services/entityService";
-import { invokeEdgeFunction } from "../../../api";
+import { asString, asBool, toDisplayName, formatRelativeTime, extOf, spaceColor, isSpaceOwner } from "../../../services/helpers";
+import { safeEntityCreate, safeEntityUpdate, deleteRemoteEntity } from "../../../services/entityService";
+import { invokeEdgeFunction, entityFilter } from "../../../api";
 import { refreshSharedFromRemote } from "../../../services/deltaSyncService";
 import { uploadSelectedFilesToSpace } from "../../../services/fileOps";
 import { useT, t } from "../../../i18n";
@@ -11,12 +11,13 @@ import { INVITE_PAGE_BASE } from "../../../config";
 import { useEscapeClose } from "../../../hooks/useEscapeClose";
 import type { ActionTarget, DesktopItem, DesktopFolder } from "../../../services/helpers";
 import { avatarColor, initials, formatChatTime, formatActivityTime, currentUserEmail, copyTextToClipboard, formatExpiryDate } from "./workspaceHelpers";
-import type { SpaceMember, SpaceMessage, SpaceTask, ActivityEntry, SectionId, SpaceInviteLink, IconComponent } from "./workspaceTypes";
+import type { SpaceMember, SpaceMessage, SpaceTask, SpaceEvent, ActivityEntry, SectionId, SpaceInviteLink, IconComponent } from "./workspaceTypes";
 import {
   IconLayoutGrid,
   IconFolder,
   IconMessageCircle,
   IconCheckSquare,
+  IconCalendar,
   IconUsers,
   IconActivity,
   IconSettings,
@@ -42,6 +43,9 @@ interface WorkspaceDetailProps {
 
 /** The invite link currently shown in the share dialog's main URL box. */
 type CurrentShareLink = { id: string; url: string; expiresAt: string | null };
+
+/** Rows pulled per space for the calendar panel — same cap deltaSyncService uses. */
+const SPACE_EVENT_LIMIT = 500;
 
 function inviteLinkUrl(link: SpaceInviteLink): string {
   if (link.url) return link.url;
@@ -85,6 +89,38 @@ function fileItemIcon(item: DesktopItem): IconComponent {
   return IconFile;
 }
 
+/** Local `YYYY-MM-DD`, used as the event add-row's default date. */
+function todayDateStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Compact "Mon, Sep 3, 09:00" label for a space event row (time dropped when all-day). */
+function formatEventWhen(iso: string, allDay: boolean): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(
+    undefined,
+    allDay
+      ? { weekday: "short", month: "short", day: "numeric" }
+      : { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
+  );
+}
+
+/** Narrow a raw PostgREST `calendar_events` row to the fields this panel renders. */
+function toSpaceEvent(row: Record<string, unknown>): SpaceEvent {
+  return {
+    id: asString(row.id),
+    title: asString(row.title),
+    start_time: asString(row.start_time),
+    end_time: asString(row.end_time),
+    location: asString(row.location),
+    all_day: asBool(row.all_day),
+    created_by: asString(row.created_by),
+  };
+}
+
 export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps) {
   const allItems = useFilesStore((s) => s.items);
   const allFolders = useFilesStore((s) => s.folders);
@@ -118,6 +154,11 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const [tasksLoading, setTasksLoading] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [showCompleted, setShowCompleted] = useState(false);
+  const [events, setEvents] = useState<SpaceEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [newEventDate, setNewEventDate] = useState(todayDateStr);
+  const [newEventTime, setNewEventTime] = useState("09:00");
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -133,15 +174,7 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
   const overviewFetchedRef = useRef<string | null>(null);
 
   // ── Computed ──
-  const isOwner = useMemo(() => {
-    if (asString(space.created_by).toLowerCase() === me) return true;
-    const members = Array.isArray(space.members) ? space.members : [];
-    return members.some(
-      (m) => m && typeof m === "object" &&
-        asString((m as SpaceMember).email).toLowerCase() === me &&
-        asString((m as SpaceMember).role) === "owner",
-    );
-  }, [space, me]);
+  const isOwner = useMemo(() => isSpaceOwner(space, me), [space, me]);
 
   const canEdit = useMemo(() => {
     if (isOwner) return true;
@@ -252,15 +285,60 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     return () => clearInterval(timer);
   }, [activeSection, activeSpaceId, fetchTasks]);
 
-  // Overview preview data: fetch tasks + latest chat once per space (no polling).
+  /**
+   * Space events come straight off PostgREST filtered by `space_id` —
+   * calendar_events is in TABLE_MAP, so no edge function is involved. RLS
+   * decides visibility; the filter just scopes the query to this space.
+   *
+   * `entityFilter` can only express equality (`filtersToPostgrest` hardcodes
+   * `eq.`), so "start_time >= today" cannot be pushed to the server and the
+   * upcoming window is cut client-side. That leaves only the sort direction to
+   * pick, and descending is the safe one: it takes the furthest-future rows,
+   * so the window is lost only once a space holds more than SPACE_EVENT_LIMIT
+   * *future* events. Ascending would instead take the earliest rows overall,
+   * and since past events pile up forever a long-lived space would eventually
+   * return nothing but history and render an empty calendar. The limit matches
+   * the per-space fetch in deltaSyncService.
+   */
+  const fetchEvents = useCallback(async (spaceId: string) => {
+    try {
+      const rows = await entityFilter<Record<string, unknown>>(
+        "CalendarEvent",
+        { space_id: spaceId },
+        "-start_time",
+        SPACE_EVENT_LIMIT,
+      );
+      setEvents(rows.map(toSpaceEvent).filter((e) => e.id));
+    } catch { /* ignore — panel keeps the last good list */ }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection !== "calendar") return;
+    setEventsLoading(true);
+    fetchEvents(activeSpaceId).finally(() => setEventsLoading(false));
+    const timer = setInterval(() => fetchEvents(activeSpaceId), 30000);
+    return () => clearInterval(timer);
+  }, [activeSection, activeSpaceId, fetchEvents]);
+
+  /** Upcoming only, soonest first — a team calendar is a look-ahead surface. */
+  const upcomingEvents = useMemo(() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const cutoff = startOfToday.toISOString();
+    return events
+      .filter((e) => e.start_time >= cutoff)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }, [events]);
+
+  // Overview preview data: fetch tasks + latest chat + events once per space (no polling).
   useEffect(() => {
     if (activeSection !== "overview") return;
     if (overviewFetchedRef.current === activeSpaceId) return;
     overviewFetchedRef.current = activeSpaceId;
     setOverviewLoading(true);
-    void Promise.allSettled([fetchTasks(activeSpaceId), fetchChatMessages(activeSpaceId)])
+    void Promise.allSettled([fetchTasks(activeSpaceId), fetchChatMessages(activeSpaceId), fetchEvents(activeSpaceId)])
       .then(() => setOverviewLoading(false));
-  }, [activeSection, activeSpaceId, fetchTasks, fetchChatMessages]);
+  }, [activeSection, activeSpaceId, fetchTasks, fetchChatMessages, fetchEvents]);
 
   const fetchActivity = useCallback(async (spaceId: string) => {
     try {
@@ -399,6 +477,30 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     } catch (err) { setStatus(t("workspaces.taskDeleteFailed", { error: String(err) })); }
   }, [activeSpaceId, fetchTasks, setStatus]);
 
+  const handleAddEvent = useCallback(async () => {
+    if (!newEventTitle.trim()) return;
+    try {
+      const start = new Date(`${newEventDate}T${newEventTime}`);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      await safeEntityCreate("CalendarEvent", {
+        title: newEventTitle.trim(),
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        provider: "manual",
+        space_id: activeSpaceId,
+      });
+      setNewEventTitle("");
+      await fetchEvents(activeSpaceId);
+    } catch (err) { setStatus(t("workspaces.eventAddFailed", { error: String(err) })); }
+  }, [newEventTitle, newEventDate, newEventTime, activeSpaceId, fetchEvents, setStatus]);
+
+  const handleDeleteEvent = useCallback(async (eventId: string) => {
+    try {
+      await deleteRemoteEntity("CalendarEvent", eventId);
+      await fetchEvents(activeSpaceId);
+    } catch (err) { setStatus(t("workspaces.eventDeleteFailed", { error: String(err) })); }
+  }, [activeSpaceId, fetchEvents, setStatus]);
+
   const closeShare = useCallback(() => setShareOpen(false), []);
   useEscapeClose(shareOpen, closeShare);
 
@@ -491,6 +593,7 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
     { id: "files" as SectionId, label: tr("workspaces.filesTab"), icon: IconFolder },
     { id: "chat" as SectionId, label: tr("workspaces.chatTab"), icon: IconMessageCircle },
     { id: "tasks" as SectionId, label: tr("workspaces.tasksTab"), icon: IconCheckSquare },
+    { id: "calendar" as SectionId, label: tr("workspaces.calendarTab"), icon: IconCalendar },
     { id: "members" as SectionId, label: tr("workspaces.membersTab"), icon: IconUsers },
     { id: "activity" as SectionId, label: tr("workspaces.activityTab"), icon: IconActivity },
     ...(isOwner ? [{ id: "settings" as SectionId, label: tr("workspaces.settingsTab"), icon: IconSettings }] : []),
@@ -533,6 +636,8 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
           spaceFolders={spaceFolders}
           allMembers={allMembers}
           activeTasks={activeTasks}
+          upcomingEvents={upcomingEvents}
+          spaceId={activeSpaceId}
           latestMessage={latestMessage}
           overviewLoading={overviewLoading}
           isOwner={isOwner}
@@ -599,6 +704,26 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
           handleAddTask={handleAddTask}
           handleToggleTask={handleToggleTask}
           handleDeleteTask={handleDeleteTask}
+        />
+      )}
+
+      {/* Calendar */}
+      {activeSection === "calendar" && (
+        <WorkspaceCalendarPanel
+          canEdit={canEdit}
+          isOwner={isOwner}
+          me={me}
+          spaceId={activeSpaceId}
+          eventsLoading={eventsLoading}
+          upcomingEvents={upcomingEvents}
+          newEventTitle={newEventTitle}
+          setNewEventTitle={setNewEventTitle}
+          newEventDate={newEventDate}
+          setNewEventDate={setNewEventDate}
+          newEventTime={newEventTime}
+          setNewEventTime={setNewEventTime}
+          handleAddEvent={handleAddEvent}
+          handleDeleteEvent={handleDeleteEvent}
         />
       )}
 
@@ -741,11 +866,13 @@ export default function WorkspaceDetail({ space, onBack }: WorkspaceDetailProps)
 type VaultItem = { id: string; title: string; itemType: string; spaceId?: string };
 type VaultFolder = { id: string; name: string; spaceId?: string };
 
-function WorkspaceOverviewPanel({ spaceItems, spaceFolders, allMembers, activeTasks, latestMessage, overviewLoading, isOwner, onInvite, setActiveSection, setFileActionTargetId }: {
+function WorkspaceOverviewPanel({ spaceItems, spaceFolders, allMembers, activeTasks, upcomingEvents, spaceId, latestMessage, overviewLoading, isOwner, onInvite, setActiveSection, setFileActionTargetId }: {
   spaceItems: DesktopItem[];
   spaceFolders: DesktopFolder[];
   allMembers: { email: string; role: string }[];
   activeTasks: SpaceTask[];
+  upcomingEvents: SpaceEvent[];
+  spaceId: string;
   latestMessage: SpaceMessage | null;
   overviewLoading: boolean;
   isOwner: boolean;
@@ -906,6 +1033,36 @@ function WorkspaceOverviewPanel({ spaceItems, spaceFolders, allMembers, activeTa
                   </span>
                   <p className="space-preview-msg-text">{latestMessage.message}</p>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Next events — full-width so the 2x2 rhythm above stays intact */}
+        <div className="space-preview-card wide" {...pressableCardProps(() => setActiveSection("calendar"))}>
+          <div className="space-preview-head">
+            <h4><IconCalendar size={14} />{tr("workspaces.nextEvents")}</h4>
+            <span className="space-preview-viewall">{tr("workspaces.viewAll")}<IconChevronRight size={13} /></span>
+          </div>
+          <div className="space-preview-body">
+            {overviewLoading && upcomingEvents.length === 0 ? (
+              <p className="space-preview-loading" aria-busy="true">&hellip;</p>
+            ) : upcomingEvents.length === 0 ? (
+              <div className="space-preview-empty">
+                <p>{tr("workspaces.noEvents")}</p>
+                <button type="button" className="space-preview-cta" onClick={(e) => { e.stopPropagation(); setActiveSection("calendar"); }}>
+                  {tr("workspaces.addEvent")}
+                </button>
+              </div>
+            ) : (
+              <div className="space-preview-events">
+                {upcomingEvents.slice(0, 3).map((event) => (
+                  <div key={event.id} className="space-preview-event">
+                    <span className="space-event-dot" style={{ background: spaceColor(spaceId) }} aria-hidden="true" />
+                    <span className="space-preview-event-title">{event.title || tr("calendar.untitled")}</span>
+                    <span className="space-preview-event-time">{formatEventWhen(event.start_time, event.all_day)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1088,7 +1245,7 @@ function WorkspaceTasksPanel({ canEdit, tasksLoading, activeTasks, completedTask
           <button type="button" onClick={handleAddTask} disabled={!newTaskTitle.trim()}>+</button>
         </div>
       )}
-      {tasksLoading && <p style={{ color: "var(--muted)", fontSize: 13 }}>Loading...</p>}
+      {tasksLoading && <p style={{ color: "var(--muted)", fontSize: 13 }}>{tr("workspaces.loading")}</p>}
       {!tasksLoading && activeTasks.length === 0 && completedTasks.length === 0 && <div className="dash-card"><p>{tr("workspaces.noTasks")}</p></div>}
       <div className="space-tasks-list">
         {activeTasks.map((task) => (
@@ -1128,6 +1285,86 @@ function WorkspaceTasksPanel({ canEdit, tasksLoading, activeTasks, completedTask
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Space calendar. Mirrors the Tasks panel shape (add-row → loading → empty →
+ * list). Create + delete only: editing routes through the main Calendar tab,
+ * whose ManageModal hydrates its form from `useRemoteDataStore.events` rather
+ * than this panel's locally fetched list.
+ */
+function WorkspaceCalendarPanel({ canEdit, isOwner, me, spaceId, eventsLoading, upcomingEvents, newEventTitle, setNewEventTitle, newEventDate, setNewEventDate, newEventTime, setNewEventTime, handleAddEvent, handleDeleteEvent }: {
+  canEdit: boolean;
+  isOwner: boolean;
+  me: string;
+  spaceId: string;
+  eventsLoading: boolean;
+  upcomingEvents: SpaceEvent[];
+  newEventTitle: string;
+  setNewEventTitle: (v: string) => void;
+  newEventDate: string;
+  setNewEventDate: (v: string) => void;
+  newEventTime: string;
+  setNewEventTime: (v: string) => void;
+  handleAddEvent: () => void;
+  handleDeleteEvent: (id: string) => void;
+}) {
+  const tr = useT();
+  const dotColor = spaceColor(spaceId);
+  return (
+    <div className="space-events">
+      {canEdit && (
+        <div className="space-events-add">
+          <input
+            type="text"
+            className="space-events-add-title"
+            placeholder={tr("workspaces.eventTitle")}
+            value={newEventTitle}
+            onChange={(e) => setNewEventTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleAddEvent(); }}
+          />
+          <input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} aria-label={tr("calendar.eventDate")} />
+          <input type="time" value={newEventTime} onChange={(e) => setNewEventTime(e.target.value)} aria-label={tr("calendar.startTime")} />
+          <button type="button" onClick={handleAddEvent} disabled={!newEventTitle.trim()} aria-label={tr("workspaces.addEvent")}>+</button>
+        </div>
+      )}
+      {eventsLoading && upcomingEvents.length === 0 && (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>{tr("workspaces.loading")}</p>
+      )}
+      {!eventsLoading && upcomingEvents.length === 0 && (
+        <div className="dash-card"><p>{tr("workspaces.noEvents")}</p></div>
+      )}
+      <div className="space-events-list">
+        {upcomingEvents.map((event) => {
+          // Members manage their own events; the space owner manages them all.
+          const mayDelete = isOwner || (!!me && event.created_by.toLowerCase() === me);
+          return (
+            <div key={event.id} className="space-event-row">
+              <span className="space-event-dot" style={{ background: dotColor }} aria-hidden="true" />
+              <div className="space-event-body">
+                <p className="space-event-title">{event.title || tr("calendar.untitled")}</p>
+                <div className="space-event-meta">
+                  <span>{formatEventWhen(event.start_time, event.all_day)}</span>
+                  {event.all_day && <span>{tr("calendar.allDay")}</span>}
+                  {event.location && <span>{event.location}</span>}
+                </div>
+              </div>
+              {mayDelete && (
+                <button
+                  type="button"
+                  className="space-event-delete"
+                  onClick={() => handleDeleteEvent(event.id)}
+                  aria-label={`${tr("menu.delete")} ${event.title || tr("calendar.untitled")}`}
+                >
+                  {"×"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1189,7 +1426,7 @@ function WorkspaceActivityPanel({ activities, activityLoading }: {
   const tr = useT();
   return (
     <div className="space-activity">
-      {activityLoading && <p style={{ color: "var(--muted)", fontSize: 13 }}>Loading...</p>}
+      {activityLoading && <p style={{ color: "var(--muted)", fontSize: 13 }}>{tr("workspaces.loading")}</p>}
       {!activityLoading && activities.length === 0 && <div className="dash-card"><p>{tr("workspaces.noActivity")}</p></div>}
       <div className="space-activity-list">
         {activities.map((a) => {

@@ -230,20 +230,69 @@ export async function refreshEmailFromRemote(): Promise<string> {
   }
 }
 
-export async function refreshCalendarFromRemote(): Promise<void> {
+export function refreshCalendarFromRemote(): Promise<void> {
+  return serialized(refreshCalendarFromRemoteInner);
+}
+
+/** Signature of the last logged calendar shard failure — keeps repeated refreshes from spamming the console. */
+let lastCalendarShardFailure = "";
+
+function logCalendarShardFailures(rejected: PromiseRejectedResult[]): void {
+  if (rejected.length === 0) {
+    lastCalendarShardFailure = "";
+    return;
+  }
+  const signature = `${rejected.length}|${String(rejected[0].reason)}`;
+  if (signature === lastCalendarShardFailure) return;
+  lastCalendarShardFailure = signature;
+  console.warn(`[calendar-refresh] ${rejected.length} query shard(s) failed; keeping the ones that succeeded`, rejected[0].reason);
+}
+
+async function refreshCalendarFromRemoteInner(): Promise<void> {
   if (!canUseRemoteData()) { console.warn("[calendar-refresh] skipped: no auth token"); return; }
+  await refreshAccessScope();
   try {
-    // Filter at the DB level by created_by — see refreshEmailFromRemote for why.
-    // Sort newest-first and pull up to 2000 so a multi-year backfill (now that
-    // sync-outlook-calendar widened its window) actually surfaces in the UI.
+    // Owned rows by created_by + (separately) rows in every accessible space,
+    // merged by id — the same owned+shared pattern as refreshFilesFromRemote.
+    // A created_by-only filter would hide teammates' team events even though
+    // RLS returns them. Both filters are pushed to the DB so the global LIMIT
+    // can't be exhausted by other users' rows.
+    // Owned sorts newest-first and pulls up to 2000 so a multi-year backfill
+    // (sync-outlook-calendar widened its window) actually surfaces in the UI.
     const me = currentUserEmail();
-    const events = await entityFilter<Record<string, unknown>>(
-      "CalendarEvent",
-      me ? { created_by: me } : {},
-      "-start_time",
-      2000,
+    const { accessibleSpaceIds } = useAuthStore.getState();
+
+    const ownedEvents = me
+      ? entityFilter<Record<string, unknown>>("CalendarEvent", { created_by: me }, "-start_time", 2000)
+      : Promise.resolve([] as Record<string, unknown>[]);
+    const sharedEvents = accessibleSpaceIds.map((spaceId) =>
+      entityFilter<Record<string, unknown>>("CalendarEvent", { space_id: spaceId }, "-start_time", 500),
     );
-    console.info(`[calendar-refresh] owned=${events.length} me="${me}"`);
+
+    // allSettled, not Promise.all: if the `space_id` column isn't there yet
+    // (frontend shipped ahead of the migration, or a PostgREST schema-cache
+    // blip) every per-space query 400s. With Promise.all one rejected shard
+    // rejects the whole fan-out, the outer catch swallows it, setEvents is
+    // never called, and the user silently loses ALL calendar refresh — owned
+    // events included — sitting on stale localStorage. Settling per shard lets
+    // the owned fetch land so the calendar degrades to personal-only instead.
+    const settled = await Promise.allSettled([ownedEvents, ...sharedEvents]);
+    const rejected = settled.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    logCalendarShardFailures(rejected);
+    if (rejected.length === settled.length) {
+      // Every shard failed — this is a total outage, not partial degradation.
+      // Bail before setEvents so we keep the cached calendar rather than
+      // replacing it with an empty list.
+      return;
+    }
+
+    const owned = settled[0].status === "fulfilled" ? settled[0].value : [];
+    const shared = settled.slice(1).flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const eventMap = new Map<string, Record<string, unknown>>();
+    for (const row of [...owned, ...shared]) eventMap.set(asString(row.id), row);
+    const events = Array.from(eventMap.values()).filter((row) => isOwnedOrInSharedSpace(row));
+
+    console.info(`[calendar-refresh] owned=${owned.length} shared=${shared.length} failed=${rejected.length} kept=${events.length} me="${me}"`);
     const sync = useSyncStore.getState();
     sync.clearEntityUpdatedAt("CalendarEvent");
     for (const row of events) {
@@ -476,7 +525,9 @@ async function syncRemoteDeltaInner(): Promise<void> {
       if (Array.isArray(eventChanges.updated)) {
         for (const row of eventChanges.updated) {
           const id = asString(row.id);
-          if (!id || !isOwnedByCurrentUser(row)) continue;
+          // Space-scoped, not owner-only: a teammate's event in a space we can
+          // see is legitimately ours to display (matches the new RLS select).
+          if (!id || !isOwnedOrInSharedSpace(row)) continue;
           const idx = events.findIndex((e) => asString(e.id) === id);
           if (idx >= 0) events[idx] = row;
           else events.unshift(row);

@@ -174,6 +174,56 @@ export function formatRelativeTime(iso: string): string {
   return `${years}y ago`;
 }
 
+/**
+ * Per-space color palette. Every hue clears 4.5:1 contrast against the dark
+ * panel surfaces (#0a0a0f / #111118), so a value is safe as a dot, a border
+ * *and* as small text. Order is load-bearing: changing it re-colors spaces.
+ */
+const SPACE_COLORS = [
+  "#60a5fa", // blue
+  "#a78bfa", // violet
+  "#34d399", // emerald
+  "#fb923c", // orange
+  "#f472b6", // pink
+  "#22d3ee", // cyan
+  "#facc15", // amber
+  "#f87171", // red
+  "#4ade80", // green
+  "#c084fc", // purple
+] as const;
+
+/** Neutral for personal (space-less) rows — the muted-text tier, 7:1 on the panel. */
+const PERSONAL_SPACE_COLOR = "#a1a1aa";
+
+/**
+ * Deterministic space → color. Same space id yields the same hue forever with
+ * no storage, so a team event is recognizable by color across every surface.
+ * The personal sentinel (`space_id === ""`) always gets the neutral.
+ */
+export function spaceColor(spaceId: string): string {
+  if (!spaceId) return PERSONAL_SPACE_COLOR;
+  let hash = 0;
+  for (let i = 0; i < spaceId.length; i++) hash = spaceId.charCodeAt(i) + ((hash << 5) - hash);
+  return SPACE_COLORS[Math.abs(hash) % SPACE_COLORS.length];
+}
+
+/**
+ * Owner check for a raw `spaces` row: the creator, or a `members[]` entry with
+ * role `owner`. Email comparison is lowercased because RLS `auth_email()` and
+ * stored `created_by` are both lowercase-normalized.
+ */
+export function isSpaceOwner(space: Record<string, unknown>, me: string): boolean {
+  if (!me) return false;
+  if (asString(space.created_by).toLowerCase() === me) return true;
+  const members = space.members;
+  if (!Array.isArray(members)) return false;
+  return members.some((m) => {
+    if (!m || typeof m !== "object") return false;
+    const row = m as Record<string, unknown>;
+    return asString(row.email).toLowerCase() === me && asString(row.role) === "owner";
+  });
+}
+
 export function toDisplayName(email: string): string {
   if (!email) return "User";
   const local = email.split("@")[0] || "";

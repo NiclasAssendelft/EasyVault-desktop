@@ -52,4 +52,19 @@ export type ActivityEntry = {
   created_at: string;
 };
 
-export type SectionId = "overview" | "files" | "chat" | "members" | "tasks" | "activity" | "settings";
+/**
+ * A `calendar_events` row scoped to a space. Read straight off PostgREST
+ * (calendar_events is in TABLE_MAP), so `start_time`/`end_time` are the raw
+ * TEXT ISO strings the column stores.
+ */
+export type SpaceEvent = {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  location: string;
+  all_day: boolean;
+  created_by: string;
+};
+
+export type SectionId = "overview" | "files" | "chat" | "members" | "tasks" | "calendar" | "activity" | "settings";
