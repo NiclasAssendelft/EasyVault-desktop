@@ -7,6 +7,7 @@ import { refreshEmailFromRemote } from "../../services/deltaSyncService";
 import { getEmailSyncCount } from "../../storage";
 import { useT, t } from "../../i18n";
 import { IconPaperclip } from "../icons";
+import RowMenu from "../RowMenu";
 
 const AVATAR_COLORS = [
   "#2563eb", "#7c3aed", "#db2777", "#ea580c",
@@ -46,28 +47,6 @@ function formatFullDate(iso: string): string {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-}
-
-function RowMenu({ onAction }: { onAction: (action: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const tr = useT();
-  return (
-    <div className="row-menu">
-      <button
-        className="row-menu-btn"
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-      >
-        &#x22EE;
-      </button>
-      {open && (
-        <div className="row-menu-dropdown open">
-          <button onClick={() => { onAction("manage"); setOpen(false); }}>{tr("menu.manage")}</button>
-          <hr />
-          <button className="danger" onClick={() => { onAction("delete"); setOpen(false); }}>{tr("menu.delete")}</button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function EmailTab() {
@@ -237,7 +216,12 @@ export default function EmailTab() {
                       </div>
                     )}
                   </div>
-                  <RowMenu onAction={(action) => handleRowAction(email, action)} />
+                  <RowMenu
+                    items={[
+                      { key: "manage", label: tr("menu.manage"), onSelect: () => handleRowAction(email, "manage") },
+                      { key: "delete", label: tr("menu.delete"), danger: true, separatorBefore: true, onSelect: () => handleRowAction(email, "delete") },
+                    ]}
+                  />
                 </div>
               );
             })}

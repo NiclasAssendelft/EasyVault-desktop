@@ -11,6 +11,7 @@ import { safeEntityCreate } from "../../services/entityService";
 import { getPreferredUploadToken, getAuthToken } from "../../storage";
 import { useT, t } from "../../i18n";
 import { IconFileText, IconMail, IconCalendar, IconSparkles, IconChevronRight } from "../icons";
+import RowMenu from "../RowMenu";
 
 /** Aligns an inline SVG icon with adjacent text (badges, buttons). */
 const INLINE_ICON: CSSProperties = { display: "inline-flex", verticalAlign: "-3px" };
@@ -20,21 +21,6 @@ function PackItemTypeIcon({ type }: { type: string }) {
   if (type === "email") return <IconMail size={15} />;
   if (type === "calendar") return <IconCalendar size={15} />;
   return <IconFileText size={15} />;
-}
-
-function RowMenu({ onAction }: { onAction: (action: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const tr = useT();
-  return (
-    <div className="row-menu">
-      <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>&#x22EE;</button>
-      {open && (
-        <div className="row-menu-dropdown open">
-          <button onClick={() => { onAction("delete"); setOpen(false); }}>{tr("menu.delete")}</button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 type GatherItems = {
@@ -350,9 +336,15 @@ export default function VaultTab() {
                       {tr("vault.items", { count: itemCount })}
                     </p>
                   </div>
-                  <RowMenu onAction={(action) => {
-                    if (action === "delete") useUiStore.getState().openDeleteModal({ kind: "item", id, entity: "GatherPack" });
-                  }} />
+                  <RowMenu
+                    items={[
+                      {
+                        key: "delete",
+                        label: tr("menu.delete"),
+                        onSelect: () => useUiStore.getState().openDeleteModal({ kind: "item", id, entity: "GatherPack" }),
+                      },
+                    ]}
+                  />
                 </article>
 
                 {isExpanded && (

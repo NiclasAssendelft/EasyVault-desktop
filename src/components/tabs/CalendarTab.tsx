@@ -7,27 +7,11 @@ import { refreshCalendarFromRemote } from "../../services/deltaSyncService";
 import { invokeEdgeFunction } from "../../api";
 import { getSavedEmail } from "../../storage";
 import { useT, t } from "../../i18n";
+import RowMenu from "../RowMenu";
 
 /** Filter-chip sentinels. Real space ids are UUIDs, so these can't collide. */
 const FILTER_ALL = "all";
 const FILTER_PERSONAL = "personal";
-
-function RowMenu({ onAction }: { onAction: (action: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const tr = useT();
-  return (
-    <div className="row-menu">
-      <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>&#x22EE;</button>
-      {open && (
-        <div className="row-menu-dropdown open">
-          <button onClick={() => { onAction("manage"); setOpen(false); }}>{tr("menu.manage")}</button>
-          <hr />
-          <button className="danger" onClick={() => { onAction("delete"); setOpen(false); }}>{tr("menu.delete")}</button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function formatDateShort(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -413,7 +397,14 @@ export default function CalendarTab() {
                   </p>
                   {note && <p className="calendar-event-note">{note}</p>}
                 </div>
-                {canEditEvent(event) && <RowMenu onAction={(action) => handleRowAction(event, action)} />}
+                {canEditEvent(event) && (
+                  <RowMenu
+                    items={[
+                      { key: "manage", label: tr("menu.manage"), onSelect: () => handleRowAction(event, "manage") },
+                      { key: "delete", label: tr("menu.delete"), danger: true, separatorBefore: true, onSelect: () => handleRowAction(event, "delete") },
+                    ]}
+                  />
+                )}
               </article>
             );
           })

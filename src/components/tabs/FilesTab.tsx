@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useFilesStore } from "../../stores/filesStore";
 import { useUiStore } from "../../stores/uiStore";
@@ -10,6 +10,7 @@ import { useT } from "../../i18n";
 import FolderCard from "../lists/FolderCard";
 import ItemRow from "../lists/ItemRow";
 import { IconClock, IconUsers, IconPin, IconFolder, IconHome, IconChevronRight, IconX } from "../icons";
+import { PortalMenu } from "../RowMenu";
 
 /** Aligns an inline SVG icon with adjacent text inside buttons. */
 const INLINE_ICON: CSSProperties = { display: "inline-flex", verticalAlign: "-3px" };
@@ -39,6 +40,8 @@ export default function FilesTab() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const moveBtnRef = useRef<HTMLButtonElement>(null);
+  const closeMovePicker = useCallback(() => setMovePickerOpen(false), []);
   const t = useT();
 
   const activeFolder = folders.find((f) => f.id === activeFolderId);
@@ -184,25 +187,32 @@ export default function FilesTab() {
       </button>
       <div className="bulk-move-wrap">
         <button
+          ref={moveBtnRef}
           type="button"
+          aria-haspopup="menu"
+          aria-expanded={movePickerOpen}
           disabled={selectedIds.size === 0 || bulkBusy}
           onClick={() => setMovePickerOpen(!movePickerOpen)}
         >
           {t("files.moveSelected")}
         </button>
-        {movePickerOpen && (
-          <div className="bulk-move-dropdown">
-            <div className="bulk-move-label">{t("files.moveTo")}</div>
-            <button type="button" onClick={() => { void handleBulkMove(""); setMovePickerOpen(false); }}>
-              {t("files.rootLevel")}
+        <PortalMenu
+          open={movePickerOpen}
+          anchorRef={moveBtnRef}
+          onClose={closeMovePicker}
+          className="bulk-move-dropdown"
+          align="left"
+        >
+          <div className="bulk-move-label">{t("files.moveTo")}</div>
+          <button type="button" onClick={() => { void handleBulkMove(""); setMovePickerOpen(false); }}>
+            {t("files.rootLevel")}
+          </button>
+          {folders.map((f) => (
+            <button key={f.id} type="button" onClick={() => { void handleBulkMove(f.id); setMovePickerOpen(false); }}>
+              <span style={INLINE_ICON}><IconFolder size={14} /></span> {f.name}
             </button>
-            {folders.map((f) => (
-              <button key={f.id} type="button" onClick={() => { void handleBulkMove(f.id); setMovePickerOpen(false); }}>
-                <span style={INLINE_ICON}><IconFolder size={14} /></span> {f.name}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </PortalMenu>
       </div>
       <button type="button" className="ghost" onClick={exitSelectMode}>{t("files.cancel")}</button>
     </div>

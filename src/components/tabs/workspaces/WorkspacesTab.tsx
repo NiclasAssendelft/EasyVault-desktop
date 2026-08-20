@@ -11,6 +11,7 @@ import { avatarColor, initials, currentUserEmail, extractInviteToken } from "./w
 import type { SpaceMember, IconComponent } from "./workspaceTypes";
 import WorkspaceDetail from "./WorkspaceDetail";
 import { IconFile, IconClipboard, IconBriefcase, IconUsers } from "../../icons";
+import RowMenu from "../../RowMenu";
 
 const TEMPLATES = [
   { id: "blank", icon: IconFile as IconComponent, nameKey: "workspaces.templateBlank" as const, folders: [] as string[], tasks: [] as string[], welcome: "" },
@@ -31,7 +32,6 @@ export default function WorkspacesTab() {
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("blank");
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [confirmDeleteSpaceId, setConfirmDeleteSpaceId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
@@ -97,7 +97,6 @@ export default function WorkspacesTab() {
       await entityDelete("Space", spaceId);
       setStatus(t("workspaces.deleted"));
       setActiveSpaceId(null);
-      setMenuOpenId(null);
       setConfirmDeleteSpaceId(null);
       await refreshAccessScope();
       await refreshSharedFromRemote();
@@ -172,23 +171,18 @@ export default function WorkspacesTab() {
               <div key={id} className="space-card" onClick={() => setActiveSpaceId(id)}>
                 <div className="space-card-header">
                   <h3 className="space-card-name">{name}</h3>
-                  <button
-                    type="button"
-                    className="space-card-menu-btn"
-                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === id ? null : id); }}
-                  >
-                    &#x22EE;
-                  </button>
-                  {menuOpenId === id && (
-                    <div className="space-card-menu">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteSpaceId(id); setMenuOpenId(null); }}
-                      >
-                        {tr("workspaces.deleteSpace")}
-                      </button>
-                    </div>
-                  )}
+                  {/* Portaled like every other menu in the app: .space-card has
+                      backdrop-filter, which makes each card its own stacking
+                      context, so an in-flow menu paints behind the neighbouring
+                      card instead of over it. */}
+                  <RowMenu
+                    items={[{
+                      key: "delete",
+                      label: tr("workspaces.deleteSpace"),
+                      danger: true,
+                      onSelect: (e) => { e.stopPropagation(); setConfirmDeleteSpaceId(id); },
+                    }]}
+                  />
                 </div>
                 {desc && <p className="space-card-desc">{desc}</p>}
                 <div className="space-card-footer">

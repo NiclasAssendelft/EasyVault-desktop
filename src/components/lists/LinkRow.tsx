@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { DesktopItem } from "../../services/helpers";
 import { formatRelativeTime } from "../../services/helpers";
 import { useUiStore } from "../../stores/uiStore";
 import { useT } from "../../i18n";
+import RowMenu from "../RowMenu";
 
 function extractDomain(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
@@ -17,21 +17,7 @@ const STATUS_MAP: Record<string, string> = {
 export default function LinkRow({ item }: { item: DesktopItem }) {
   const openSaveLinkModal = useUiStore((s) => s.openSaveLinkModal);
   const openDeleteModal = useUiStore((s) => s.openDeleteModal);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const menuRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
   const t = useT();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
-          btnRef.current && !btnRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
 
   const domain = extractDomain(item.sourceUrl || "");
   const userTags = (item.tags || []).filter((tg) => !tg.startsWith("status:"));
@@ -43,7 +29,6 @@ export default function LinkRow({ item }: { item: DesktopItem }) {
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     if (item.sourceUrl) openUrl(item.sourceUrl).catch(() => {});
-    setMenuOpen(false);
   }
 
   function handleRowClick() {
@@ -82,26 +67,26 @@ export default function LinkRow({ item }: { item: DesktopItem }) {
         )}
       </div>
 
-      <div className="row-menu">
-        <button ref={btnRef} className="row-menu-btn" onClick={(e) => {
-          e.stopPropagation();
-          if (!menuOpen && btnRef.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            setMenuPos({ top: r.bottom + 4, left: r.right });
-          }
-          setMenuOpen(!menuOpen);
-        }}>&#x22EE;</button>
-        {menuOpen && (
-          <div ref={menuRef} className="row-menu-dropdown open" style={{ position: "fixed", top: menuPos.top, left: "auto", right: window.innerWidth - menuPos.left }}>
-            <button onClick={handleOpen}>{t("linkMenu.open")}</button>
-            <button onClick={(e) => { e.stopPropagation(); openSaveLinkModal(item.id); setMenuOpen(false); }}>{t("linkMenu.edit")}</button>
-            <hr />
-            <button className="danger" onClick={(e) => { e.stopPropagation(); openDeleteModal({ kind: "item", id: item.id, entity: "VaultItem" }); setMenuOpen(false); }}>
-              {t("menu.delete")}
-            </button>
-          </div>
-        )}
-      </div>
+      <RowMenu
+        items={[
+          { key: "open", label: t("linkMenu.open"), onSelect: handleOpen },
+          {
+            key: "edit",
+            label: t("linkMenu.edit"),
+            onSelect: (e) => { e.stopPropagation(); openSaveLinkModal(item.id); },
+          },
+          {
+            key: "delete",
+            label: t("menu.delete"),
+            danger: true,
+            separatorBefore: true,
+            onSelect: (e) => {
+              e.stopPropagation();
+              openDeleteModal({ kind: "item", id: item.id, entity: "VaultItem" });
+            },
+          },
+        ]}
+      />
     </article>
   );
 }
