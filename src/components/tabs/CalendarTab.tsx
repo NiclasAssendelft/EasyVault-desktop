@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRemoteDataStore } from "../../stores/remoteDataStore";
 import { useUiStore } from "../../stores/uiStore";
-import { asString, asBool, getStartOfWeek, addDays, spaceColor, isSpaceOwner } from "../../services/helpers";
+import { asString, asBool, getStartOfWeek, addDays, spaceColor, isSpaceOwner, toDisplayName } from "../../services/helpers";
 import { safeEntityCreate } from "../../services/entityService";
 import { refreshCalendarFromRemote } from "../../services/deltaSyncService";
 import { invokeEdgeFunction } from "../../api";
@@ -71,6 +71,7 @@ export default function CalendarTab() {
   const [newStart, setNewStart] = useState("09:00");
   const [newEnd, setNewEnd] = useState("10:00");
   const [newAllDay, setNewAllDay] = useState(false);
+  const [newNote, setNewNote] = useState("");
   const [newSpaceId, setNewSpaceId] = useState("");
 
   /** space id → display name, for the color chip on each event row. */
@@ -186,17 +187,21 @@ export default function CalendarTab() {
       // unsupported, which would silently strip a real team assignment.
       if (newSpaceId) payload.space_id = newSpaceId;
       if (newAllDay) payload.all_day = true;
+      // Free-text note ("who it concerns", "bring the Q3 numbers"). Stored in
+      // the long-existing description column, so no schema change is needed.
+      if (newNote.trim()) payload.description = newNote.trim();
       await safeEntityCreate("CalendarEvent", payload);
       setStatus(t("calendar.created"));
       setShowCreate(false);
       setNewTitle("");
       setNewAllDay(false);
+      setNewNote("");
       await refreshCalendarFromRemote();
     } catch (err) {
       console.error("[CalendarTab] create event failed:", err);
       setStatus(t("calendar.createFailed", { error: String(err) }));
     }
-  }, [newTitle, newDate, newStart, newEnd, newAllDay, newSpaceId, setStatus]);
+  }, [newTitle, newDate, newStart, newEnd, newAllDay, newSpaceId, newNote, setStatus]);
 
   const handleRowAction = useCallback(
     (event: Record<string, unknown>, action: string) => {
@@ -262,6 +267,17 @@ export default function CalendarTab() {
               </div>
             </div>
           )}
+          <div>
+            <label htmlFor="cal-new-note">{tr("calendar.note")}</label>
+            <textarea
+              id="cal-new-note"
+              className="calendar-note-input"
+              rows={2}
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder={tr("calendar.notePlaceholder")}
+            />
+          </div>
           <div className="cal-modal-actions">
             <button type="button" className="ghost" onClick={() => setShowCreate(false)}>{tr("calendar.cancel")}</button>
             <button type="button" onClick={handleCreateEvent} disabled={!newTitle.trim()}>{tr("calendar.create")}</button>
@@ -358,6 +374,11 @@ export default function CalendarTab() {
             const isImportant = asBool(event.is_important);
             const allDay = asBool(event.all_day);
             const provider = asString(event.provider, "manual");
+            const note = asString(event.description);
+            // Outlook-synced events keep the "outlook" badge (its provenance is
+            // the useful fact). For events added in EasyVault, who added it is
+            // far more useful than the internal provider value "manual".
+            const addedBy = toDisplayName(asString(event.created_by));
             const evSpaceId = asString(event.space_id);
             const evSpaceName = evSpaceId ? spaceNames.get(evSpaceId) || tr("calendar.space") : "";
             const when = startTime
@@ -376,7 +397,7 @@ export default function CalendarTab() {
                     {title}
                     {isImportant && <span className="badge badge-important"> {tr("email.important")}</span>}
                     <span className={`calendar-provider-badge ${provider}`}>
-                      {provider === "outlook" ? tr("calendar.outlook") : tr("calendar.manual")}
+                      {provider === "outlook" ? tr("calendar.outlook") : tr("calendar.addedBy", { name: addedBy })}
                     </span>
                   </p>
                   <p className="file-row-sub">
@@ -390,6 +411,7 @@ export default function CalendarTab() {
                     {allDay ? ` \u2022 ${tr("calendar.allDay")}` : ""}
                     {location ? ` \u2022 ${location}` : ""}
                   </p>
+                  {note && <p className="calendar-event-note">{note}</p>}
                 </div>
                 {canEditEvent(event) && <RowMenu onAction={(action) => handleRowAction(event, action)} />}
               </article>

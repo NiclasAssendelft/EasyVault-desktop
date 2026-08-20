@@ -3380,9 +3380,35 @@ button:disabled {
   color: #60a5fa;
 }
 
+/* Events added in EasyVault now show "Added by <name>" here instead of the
+   internal provider value. A person's name should not be shouted in caps or
+   badged like a status, so this variant drops the pill and reads as quiet
+   secondary text. The .outlook variant keeps its pill — provenance is a tag. */
 .calendar-provider-badge.manual {
-  background: rgba(34, 197, 94, 0.12);
-  color: #86efac;
+  background: transparent;
+  color: #a1a1aa;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-size: 10px;
+  padding: 1px 0 1px 6px;
+}
+
+/* Free-text note ("who it concerns", "bring the Q3 numbers"). */
+.calendar-event-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #a1a1aa;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.calendar-note-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 44px;
+  font: inherit;
 }
 
 .calendar-create-modal {
